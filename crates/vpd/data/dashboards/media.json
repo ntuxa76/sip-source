@@ -1,0 +1,207 @@
+{
+  "schemaVersion": 1,
+  "uid": "media",
+  "title": "Media quality",
+  "description": "MOS, loss, jitter and RTT by node, trunk and handset, with the worst calls",
+  "tags": [
+    "built-in"
+  ],
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "refresh": "30s",
+  "sharedCrosshair": null,
+  "variables": [
+    {
+      "name": "capture_id",
+      "label": "Capture ID",
+      "type": "field",
+      "field": "capture",
+      "multi": true
+    }
+  ],
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "MOS p50",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 6,
+        "h": 3
+      },
+      "query": {
+        "mode": "metric",
+        "metric": "mos_p50"
+      },
+      "options": {}
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "MOS p5",
+      "gridPos": {
+        "x": 6,
+        "y": 0,
+        "w": 6,
+        "h": 3
+      },
+      "query": {
+        "mode": "metric",
+        "metric": "mos_p5"
+      },
+      "options": {}
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Poor or bad calls",
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 6,
+        "h": 3
+      },
+      "query": {
+        "mode": "metric",
+        "metric": "poor_share"
+      },
+      "options": {}
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "One-way audio",
+      "gridPos": {
+        "x": 18,
+        "y": 0,
+        "w": 6,
+        "h": 3
+      },
+      "query": {
+        "mode": "metric",
+        "metric": "one_way"
+      },
+      "options": {}
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "MOS p5 by media node",
+      "gridPos": {
+        "x": 0,
+        "y": 3,
+        "w": 12,
+        "h": 9
+      },
+      "query": {
+        "mode": "metric",
+        "metric": "mos_p5",
+        "groupBy": "media_node",
+        "minInterval": 900
+      },
+      "options": {
+        "viz": "line",
+        "yMin": 1,
+        "yMax": 5
+      }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Loss p95 by media node",
+      "gridPos": {
+        "x": 12,
+        "y": 3,
+        "w": 12,
+        "h": 9
+      },
+      "query": {
+        "mode": "metric",
+        "metric": "loss_p95",
+        "groupBy": "media_node",
+        "minInterval": 900
+      },
+      "options": {
+        "viz": "line"
+      }
+    },
+    {
+      "id": 7,
+      "type": "top",
+      "title": "Worst MOS by handset model",
+      "gridPos": {
+        "x": 0,
+        "y": 12,
+        "w": 8,
+        "h": 9
+      },
+      "query": {
+        "mode": "metric",
+        "metric": "mos_avg",
+        "groupBy": "ua_model"
+      },
+      "options": {
+        "limit": 8,
+        "order": "asc"
+      }
+    },
+    {
+      "id": 8,
+      "type": "top",
+      "title": "One-way audio by media node",
+      "gridPos": {
+        "x": 8,
+        "y": 12,
+        "w": 8,
+        "h": 9
+      },
+      "query": {
+        "mode": "metric",
+        "metric": "one_way",
+        "groupBy": "media_node"
+      },
+      "options": {
+        "limit": 6
+      }
+    },
+    {
+      "id": 9,
+      "type": "top",
+      "title": "MOS by codec",
+      "gridPos": {
+        "x": 16,
+        "y": 12,
+        "w": 8,
+        "h": 9
+      },
+      "query": {
+        "mode": "metric",
+        "metric": "mos_avg",
+        "groupBy": "codec"
+      },
+      "options": {
+        "limit": 6,
+        "order": "asc"
+      }
+    },
+    {
+      "id": 10,
+      "type": "calls",
+      "title": "Worst calls",
+      "gridPos": {
+        "x": 0,
+        "y": 21,
+        "w": 24,
+        "h": 12
+      },
+      "query": {
+        "mode": "metric",
+        "q": "mos<3.0"
+      },
+      "options": {}
+    }
+  ]
+}

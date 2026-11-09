@@ -1,0 +1,135 @@
+{
+  "schemaVersion": 1,
+  "uid": "trunks",
+  "title": "Trunks & carriers",
+  "description": "Per-carrier volume, concurrency, ratios and rejects",
+  "tags": [
+    "built-in"
+  ],
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "refresh": "30s",
+  "sharedCrosshair": null,
+  "variables": [
+    {
+      "name": "capture_id",
+      "label": "Capture ID",
+      "type": "field",
+      "field": "capture",
+      "multi": true
+    }
+  ],
+  "panels": [
+    {
+      "id": 1,
+      "type": "table",
+      "title": "Carrier scorecard",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 9
+      },
+      "query": {
+        "mode": "metric",
+        "metrics": [
+          "attempts",
+          "cps",
+          "concurrent",
+          "asr",
+          "ner",
+          "pdd_p95",
+          "acd",
+          "mos_avg"
+        ],
+        "groupBy": "trunk"
+      },
+      "options": {}
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Concurrent calls by trunk",
+      "gridPos": {
+        "x": 0,
+        "y": 9,
+        "w": 12,
+        "h": 9
+      },
+      "query": {
+        "mode": "metric",
+        "metric": "concurrent",
+        "groupBy": "trunk"
+      },
+      "options": {
+        "viz": "line"
+      }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "PDD p95 by trunk",
+      "gridPos": {
+        "x": 12,
+        "y": 9,
+        "w": 12,
+        "h": 9
+      },
+      "query": {
+        "mode": "metric",
+        "metric": "pdd_p95",
+        "groupBy": "trunk",
+        "top": 4,
+        "minInterval": 900
+      },
+      "options": {
+        "viz": "line"
+      }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "ASR by trunk",
+      "gridPos": {
+        "x": 0,
+        "y": 18,
+        "w": 12,
+        "h": 9
+      },
+      "query": {
+        "mode": "metric",
+        "metric": "asr",
+        "groupBy": "trunk",
+        "filter": "direction:outbound",
+        "top": 4,
+        "minInterval": 900
+      },
+      "options": {
+        "viz": "line",
+        "yMax": 100
+      }
+    },
+    {
+      "id": 5,
+      "type": "top",
+      "title": "Rejects by Q.850 cause",
+      "gridPos": {
+        "x": 12,
+        "y": 18,
+        "w": 12,
+        "h": 9
+      },
+      "query": {
+        "mode": "metric",
+        "metric": "findings",
+        "groupBy": "q850",
+        "filter": "finding:CARRIER_REJECT"
+      },
+      "options": {
+        "limit": 6
+      }
+    }
+  ]
+}

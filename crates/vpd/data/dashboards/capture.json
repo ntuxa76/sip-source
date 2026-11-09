@@ -1,0 +1,133 @@
+{
+  "schemaVersion": 1,
+  "uid": "capture",
+  "title": "Capture health",
+  "description": "HEP rates, drops, clock offset, ingest lag and insert latency",
+  "tags": [
+    "built-in"
+  ],
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "refresh": "30s",
+  "sharedCrosshair": null,
+  "variables": [
+    {
+      "name": "capture_id",
+      "label": "Capture ID",
+      "type": "field",
+      "field": "capture",
+      "multi": true
+    }
+  ],
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Ingest lag",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 8,
+        "h": 3
+      },
+      "query": {
+        "mode": "metric",
+        "metric": "ingest_lag"
+      },
+      "options": {}
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "ClickHouse insert p95",
+      "gridPos": {
+        "x": 16,
+        "y": 0,
+        "w": 8,
+        "h": 3
+      },
+      "query": {
+        "mode": "metric",
+        "metric": "ch_insert"
+      },
+      "options": {}
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "HEP packets/s by agent",
+      "gridPos": {
+        "x": 0,
+        "y": 3,
+        "w": 12,
+        "h": 9
+      },
+      "query": {
+        "mode": "metric",
+        "metric": "hep_pps",
+        "groupBy": "agent"
+      },
+      "options": {
+        "viz": "line"
+      }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Drops by reason",
+      "gridPos": {
+        "x": 12,
+        "y": 3,
+        "w": 12,
+        "h": 9
+      },
+      "query": {
+        "mode": "metric",
+        "metric": "hep_drops",
+        "groupBy": "reason"
+      },
+      "options": {
+        "viz": "stacked"
+      }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Agent clock offset",
+      "gridPos": {
+        "x": 0,
+        "y": 12,
+        "w": 12,
+        "h": 9
+      },
+      "query": {
+        "mode": "metric",
+        "metric": "clock_offset",
+        "groupBy": "agent"
+      },
+      "options": {
+        "viz": "line"
+      }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "ClickHouse insert p95",
+      "gridPos": {
+        "x": 12,
+        "y": 12,
+        "w": 12,
+        "h": 9
+      },
+      "query": {
+        "mode": "metric",
+        "metric": "ch_insert"
+      },
+      "options": {
+        "viz": "line"
+      }
+    }
+  ]
+}

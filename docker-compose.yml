@@ -1,0 +1,38 @@
+# Set the passwords in a .env file next to this one (see .env.compose.example), then:
+#   docker compose up -d
+services:
+  mariadb:
+    image: docker.io/library/mariadb:11.4
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:?set MARIADB_ROOT_PASSWORD in .env}
+      MARIADB_DATABASE: voip_panel
+      MARIADB_USER: voip_panel
+      MARIADB_PASSWORD: ${VP_DB_PASSWORD:?set VP_DB_PASSWORD in .env}
+    volumes:
+      - mariadb-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  voip-panel:
+    image: ghcr.io/noorotk/voip-panel:latest
+    build: .
+    restart: unless-stopped
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    environment:
+      VP_DB_HOST: mariadb
+      VP_DB_USER: voip_panel
+      VP_DB_PASSWORD: ${VP_DB_PASSWORD}
+      # Any other VP_* variable can go here. `docs/ENVIRONMENT.md` lists them all.
+    ports:
+      - "${VP_PORT:-8080}:8080"
+      - "${VP_HEP_PORT:-9060}:9060/udp"
+      - "${VP_HEP_PORT:-9060}:9060/tcp"
+
+volumes:
+  mariadb-data:
