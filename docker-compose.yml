@@ -23,7 +23,7 @@ services:
       retries: 30
 
   sip-source:
-    image: ntuxa76/sip-source:0.3
+    image: ntuxa76/sip-source:0.4
     restart: unless-stopped
     depends_on:
       mariadb:

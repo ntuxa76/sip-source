@@ -6,7 +6,7 @@ SIP servers send it HEP. It stores the traffic, joins the legs into calls, and g
 
 ## Run it
 
-The image is `ntuxa76/sip-source:0.3` on Docker Hub. You need Docker (or Podman). MariaDB comes with the compose file, or you can use your own. A ClickHouse server is optional.
+The image is `ntuxa76/sip-source:0.4` on Docker Hub. You need Docker (or Podman). MariaDB comes with the compose file, or you can use your own. A ClickHouse server is optional.
 
 ### With Docker Compose (runs the panel and MariaDB)
 
@@ -32,7 +32,7 @@ docker run -d --name sip-source -p 8080:8080 -p 9060:9060/udp -p 9060:9060/tcp \
   -e VP_DB_HOST=your-mariadb \
   -e VP_DB_USER=voip_panel \
   -e VP_DB_PASSWORD=your-password \
-  ntuxa76/sip-source:0.3
+  ntuxa76/sip-source:0.4
 ```
 
 Open <http://localhost:8080>. On first start the login page asks you to create the administrator password, then takes you straight into the app. **Until that's done, anyone who reaches the port can claim the admin account**, so set `VP_SETUP_TOKEN` if the port is exposed, or `VP_ADMIN_PASSWORD` to skip the screen.
@@ -101,7 +101,7 @@ Every setting has an environment variable, `VP_<NAME>`. All are optional except 
 
 - [`docs/ENVIRONMENT.md`](docs/ENVIRONMENT.md) lists every variable with its default and what it does.
 - [`.env.example`](.env.example) is the same list, ready to copy.
-- `docker run --rm ntuxa76/sip-source:0.3 env` prints the reference from the image itself.
+- `docker run --rm ntuxa76/sip-source:0.4 env` prints the reference from the image itself.
 
 Application settings can also be changed under **Admin → Settings** and are saved in MariaDB. A value set in the environment takes priority and appears locked there. Invalid values stop the container at startup with a message saying which one is wrong.
 
