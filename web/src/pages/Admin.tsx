@@ -17,7 +17,7 @@ const SECTIONS = [
   { id: "audit", label: "Audit log", perm: "audit_read" },
 ];
 
-const field = "w-full h-8 rounded-md bg-sunken border border-line px-2 focus:border-accent focus:outline-none";
+const field = "w-full h-8 rounded-md bg-sunken border border-line px-2 focus:border-accent";
 
 function useApi(section: string, enabled = true) {
   return useQuery({ queryKey: ["admin", section], queryFn: () => get(section === "audit" ? "/admin/audit" : `/admin/${section}`), enabled });
@@ -295,6 +295,7 @@ function SettingRow({ s, onSaved }: { s: any; onSaved: () => void }) {
     onError: (e: Error) => setProblem(e.message),
   });
   const commit = (v: string) => v !== s.value && save.mutate(v);
+  const helpId = `setting-${s.key}-help`;
   return (
     <div className="grid md:grid-cols-[1fr_260px] gap-x-4 gap-y-1 px-3 py-2.5 border-b border-line last:border-b-0">
       <div>
@@ -302,18 +303,18 @@ function SettingRow({ s, onSaved }: { s: any; onSaved: () => void }) {
           {s.label}
           {s.restart && <Badge tone="warn">restart needed</Badge>}
         </div>
-        <p className="text-xs text-ink-2">{s.help}</p>
-        <code className="text-[11px] text-ink-3 font-mono">{s.env}</code>
+        <p id={helpId} className="text-xs text-ink-2">{s.help}</p>
+        <code className="text-[11.5px] text-ink-3 font-mono">{s.env}</code>
       </div>
       <div>
         {s.kind === "bool" ? (
-          <Toggle checked={value === "true"} onChange={(v) => { if (locked) return; setValue(String(v)); save.mutate(String(v)); }}>{value === "true" ? "On" : "Off"}</Toggle>
+          <Toggle label={s.label} checked={value === "true"} onChange={(v) => { if (locked) return; setValue(String(v)); save.mutate(String(v)); }}>{value === "true" ? "On" : "Off"}</Toggle>
         ) : s.kind === "choice" ? (
-          <Select className="w-full !h-8" value={value} onChange={(v) => { setValue(v); save.mutate(v); }} options={s.options.map((o: string) => ({ value: o, label: o }))} />
+          <Select label={s.label} className="w-full !h-8" value={value} onChange={(v) => { setValue(v); save.mutate(v); }} options={s.options.map((o: string) => ({ value: o, label: o }))} />
         ) : (
-          <input disabled={locked} type={s.kind === "string" ? "text" : "number"} min={s.min ?? undefined} max={s.max ?? undefined} value={value} onChange={(e) => setValue(e.target.value)} onBlur={() => commit(value)} onKeyDown={(e) => e.key === "Enter" && commit(value)} className={`${field} disabled:opacity-60`} />
+          <input aria-label={s.label} aria-describedby={helpId} disabled={locked} type={s.kind === "string" ? "text" : "number"} min={s.min ?? undefined} max={s.max ?? undefined} value={value} onChange={(e) => setValue(e.target.value)} onBlur={() => commit(value)} onKeyDown={(e) => e.key === "Enter" && commit(value)} className={`${field} disabled:opacity-60`} />
         )}
-        <div className="flex items-center gap-2 mt-1 text-[11px] text-ink-3">
+        <div className="flex items-center gap-2 mt-1 text-[11.5px] text-ink-3">
           {locked ? <span><Lock size={10} className="inline -mt-0.5 mr-0.5" aria-hidden />Set by environment variable</span> : s.source === "database" ? (
             <>
               <span>Saved in database</span>
@@ -322,7 +323,7 @@ function SettingRow({ s, onSaved }: { s: any; onSaved: () => void }) {
           ) : <span>Default</span>}
           {save.isSuccess && <span className="text-good">Saved</span>}
         </div>
-        {problem && <p className="text-crit text-xs mt-1">{problem}</p>}
+        {problem && <p role="alert" className="text-crit text-xs mt-1">{problem}</p>}
       </div>
     </div>
   );
@@ -340,10 +341,10 @@ function SettingsPanel() {
     client.invalidateQueries({ queryKey: ["me"] });
   };
   return (
-    <div className="flex">
-      <nav className="w-[190px] shrink-0 border-r border-line p-2">
+    <div className="flex flex-col md:flex-row">
+      <nav className="md:w-[190px] shrink-0 border-b md:border-b-0 md:border-r border-line p-2 max-md:flex max-md:overflow-x-auto max-md:gap-1">
         {groups.map((g) => (
-          <button type="button" key={g} onClick={() => setGroup(g)} className={`block w-full text-left px-2.5 py-1.5 rounded-md ${group === g ? "bg-accent-wash font-medium" : "text-ink-2 hover:bg-sunken"}`}>{g}</button>
+          <button type="button" key={g} onClick={() => setGroup(g)} className={`block md:w-full shrink-0 whitespace-nowrap text-left px-2.5 py-1.5 rounded-md ${group === g ? "bg-accent-wash font-medium" : "text-ink-2 hover:bg-sunken"}`}>{g}</button>
         ))}
       </nav>
       <div className="flex-1 min-w-0">
@@ -476,21 +477,23 @@ function Sources({ rows }: { rows: any[] }) {
   return (
     <div>
       <p className="text-ink-2 text-xs px-4 pt-3 pb-2 max-w-[720px]">Every server that sends HEP, by address. Give each one an alias, such as Asterisk-1 or OpenSIPS-edge; the source picker at the top shows it. The alias names new traffic, already stored calls keep the name they had.</p>
-      <table className="data-table">
-        <thead><tr><th>Address</th><th>Alias</th><th>Capture ID</th><th>HEP</th><th className="num">Packets</th><th className="num">Clock offset</th><th>Last seen</th><th>Status</th></tr></thead>
-        <tbody>{rows.map((r) => (
-          <tr key={r.ip}>
-            <td className="font-mono text-xs">{r.ip}</td>
-            <td>{can("settings_manage") ? <input aria-label={`Alias for ${r.ip}`} defaultValue={r.alias} placeholder="Add an alias" onBlur={(e) => { const alias = e.target.value.trim(); if (alias !== r.alias) rename.mutate({ ip: r.ip, alias }); }} onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()} className="h-8 w-[200px] rounded-lg bg-raised border border-line-2 px-2" /> : (r.alias || <span className="text-ink-3">–</span>)}</td>
-            <td className="tnum">{r.capture_id}</td>
-            <td>v{r.hep_version}</td>
-            <td className="num">{r.packets.toLocaleString()}</td>
-            <td className="num">{r.offset_ms} ms</td>
-            <td>{r.last_seen ? fmtDateTime(r.last_seen, tz).slice(5) : "before restart"}</td>
-            <td><Badge tone={r.status === "active" ? "good" : r.status === "clock skew" ? "warn" : "neutral"}>{r.status}</Badge></td>
-          </tr>
-        ))}</tbody>
-      </table>
+      <div className="overflow-x-auto">
+        <table className="data-table">
+          <thead><tr><th>Address</th><th>Alias</th><th>Capture ID</th><th>HEP</th><th className="num">Packets</th><th className="num">Clock offset</th><th>Last seen</th><th>Status</th></tr></thead>
+          <tbody>{rows.map((r) => (
+            <tr key={r.ip}>
+              <td className="font-mono text-xs">{r.ip}</td>
+              <td>{can("settings_manage") ? <input aria-label={`Alias for ${r.ip}`} defaultValue={r.alias} placeholder="Add an alias" onBlur={(e) => { const alias = e.target.value.trim(); if (alias !== r.alias) rename.mutate({ ip: r.ip, alias }); }} onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()} className="h-8 w-[200px] rounded-lg bg-raised border border-line-2 px-2" /> : (r.alias || <span className="text-ink-3">–</span>)}</td>
+              <td className="tnum">{r.capture_id}</td>
+              <td>v{r.hep_version}</td>
+              <td className="num">{r.packets.toLocaleString()}</td>
+              <td className="num">{r.offset_ms} ms</td>
+              <td>{r.last_seen ? fmtDateTime(r.last_seen, tz).slice(5) : "before restart"}</td>
+              <td><Badge tone={r.status === "active" ? "good" : r.status === "clock skew" ? "warn" : "neutral"}>{r.status}</Badge></td>
+            </tr>
+          ))}</tbody>
+        </table>
+      </div>
     </div>
   );
 }

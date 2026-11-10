@@ -29,7 +29,7 @@ function Dialog({ title, onClose, children, wide }: { title: string; onClose: ()
   );
 }
 
-const input = "w-full h-8 rounded-md bg-sunken border border-line px-2 focus:border-accent focus:outline-none";
+const input = "w-full h-8 rounded-md bg-sunken border border-line px-2 focus:border-accent";
 
 export function DashboardList() {
   const { can } = usePrefs();
@@ -87,9 +87,9 @@ export function DashboardList() {
             <div className="flex items-center justify-between mt-2">
               <span className="text-ink-3 text-xs tnum">{d.panels} panels · v{d.version}</span>
               <span className="flex gap-0.5 text-ink-3">
-                <button type="button" title="Copy JSON" aria-label={`Copy JSON of ${d.title}`} onClick={() => copyJson(d.uid)} className="p-1 rounded hover:bg-sunken"><Braces size={14} /></button>
-                {can("dashboards_edit") && <button type="button" title="Duplicate" aria-label={`Duplicate ${d.title}`} onClick={() => duplicate.mutate(d.uid)} className="p-1 rounded hover:bg-sunken"><Copy size={14} /></button>}
-                {can("dashboards_delete") && <button type="button" title="Delete" aria-label={`Delete ${d.title}`} onClick={() => confirm(`Delete "${d.title}"? This can't be undone.`) && remove.mutate(d.uid)} className="p-1 rounded hover:bg-sunken hover:text-crit"><Trash2 size={14} /></button>}
+                <button type="button" title="Copy JSON" aria-label={`Copy JSON of ${d.title}`} onClick={() => copyJson(d.uid)} className="p-[5px] rounded hover:bg-sunken"><Braces size={14} /></button>
+                {can("dashboards_edit") && <button type="button" title="Duplicate" aria-label={`Duplicate ${d.title}`} onClick={() => duplicate.mutate(d.uid)} className="p-[5px] rounded hover:bg-sunken"><Copy size={14} /></button>}
+                {can("dashboards_delete") && <button type="button" title="Delete" aria-label={`Delete ${d.title}`} onClick={() => confirm(`Delete "${d.title}"? This can't be undone.`) && remove.mutate(d.uid)} className="p-[5px] rounded hover:bg-sunken hover:text-crit"><Trash2 size={14} /></button>}
               </span>
             </div>
           </div>
@@ -262,9 +262,22 @@ function VersionsDialog({ uid, tz, onClose, onRestored }: { uid: string; tz: str
 function Grid({ board, editing, ctx, onLayout, onEdit, onDuplicate, onDelete }: { board: Dashboard; editing: boolean; ctx: PanelContext; onLayout: (l: readonly any[]) => void; onEdit: (id: number) => void; onDuplicate: (id: number) => void; onDelete: (id: number) => void }) {
   const { width, containerRef, mounted } = useContainerWidth();
   const layout = useMemo(() => board.panels.map((p) => ({ i: String(p.id), ...p.gridPos, minW: 2, minH: 2 })), [board.panels]);
+  // On narrow screens the 24-column grid squeezes panels to a few pixels, so they are read top to bottom instead.
+  // Small stat panels go two to a row. Editing keeps the grid.
+  const stacked = mounted && width < 768 && !editing;
+  const ordered = useMemo(() => [...board.panels].sort((a, b) => a.gridPos.y - b.gridPos.y || a.gridPos.x - b.gridPos.x), [board.panels]);
   return (
     <div ref={containerRef}>
-      {mounted && (
+      {stacked && (
+        <div className="grid grid-cols-2 gap-2.5">
+          {ordered.map((p) => (
+            <div key={String(p.id)} className={p.gridPos.w <= 6 ? "" : "col-span-2"}>
+              <PanelSized panel={p} ctx={ctx} />
+            </div>
+          ))}
+        </div>
+      )}
+      {mounted && !stacked && (
         <GridLayout
           layout={layout}
           width={width}
@@ -469,20 +482,20 @@ function GettingStarted() {
       </div>
       <ol className="grid md:grid-cols-3 gap-4 px-5 py-4">
         <li className="rounded-lg border border-line p-3.5">
-          <div className="text-[11px] font-semibold text-accent uppercase tracking-wide">Step 1</div>
+          <div className="text-[11.5px] font-semibold text-accent uppercase tracking-wide">Step 1</div>
           <div className="font-medium mt-1">Send HEP to port 9060</div>
           <p className="text-ink-2 text-[12.5px] mt-1">UDP or TCP, HEP version 2 or 3, to <span className="font-mono">{host}:9060</span>. Each sender appears under Sources by its address.</p>
         </li>
         <li className="rounded-lg border border-line p-3.5">
           <div className="flex items-center justify-between">
-            <div className="text-[11px] font-semibold text-accent uppercase tracking-wide">Step 2 · Asterisk</div>
+            <div className="text-[11.5px] font-semibold text-accent uppercase tracking-wide">Step 2 · Asterisk</div>
             <button type="button" className="text-xs text-accent hover:underline" onClick={() => navigator.clipboard?.writeText(conf).then(() => setCopied(true))}>{copied ? "Copied" : "Copy"}</button>
           </div>
           <pre className="mt-1.5 rounded-md bg-sunken border border-line px-2.5 py-2 font-mono text-[11.5px] leading-5 overflow-x-auto">{conf}</pre>
           <p className="text-ink-2 text-[12px] mt-1.5">In <span className="font-mono">hep.conf</span>, then load res_hep, res_hep_pjsip and res_hep_rtcp.</p>
         </li>
         <li className="rounded-lg border border-line p-3.5">
-          <div className="text-[11px] font-semibold text-accent uppercase tracking-wide">Step 3</div>
+          <div className="text-[11.5px] font-semibold text-accent uppercase tracking-wide">Step 3</div>
           <div className="font-medium mt-1">Name your sources</div>
           <p className="text-ink-2 text-[12.5px] mt-1">OpenSIPS, Kamailio, FreeSWITCH and heplify work the same way. Give each sender an alias under Admin, Sources, then pick it from the source menu at the top.</p>
         </li>

@@ -516,8 +516,8 @@ export function HistogramStrip({ histogram, height = 70, onZoom }: { histogram: 
       animation: false,
       textStyle: { fontFamily: FONT },
       grid: { left: 36, right: 6, top: 4, bottom: 18 },
-      xAxis: { type: "category", data: histogram.buckets.map(String), axisTick: { show: false }, axisLine: { lineStyle: { color: c.axis } }, axisLabel: { color: c.muted, fontSize: 10.5, interval: (i: number) => isTick(histogram.buckets[i]), formatter: (v: string) => label(Number(v)), hideOverlap: true } },
-      yAxis: { type: "value", splitNumber: 2, axisLine: { show: false }, axisTick: { show: false }, splitLine: { lineStyle: { color: c.grid } }, axisLabel: { color: c.muted, fontSize: 10.5, formatter: compact } },
+      xAxis: { type: "category", data: histogram.buckets.map(String), axisTick: { show: false }, axisLine: { lineStyle: { color: c.axis } }, axisLabel: { color: c.muted, fontSize: 11, interval: (i: number) => isTick(histogram.buckets[i]), formatter: (v: string) => label(Number(v)), hideOverlap: true } },
+      yAxis: { type: "value", splitNumber: 2, axisLine: { show: false }, axisTick: { show: false }, splitLine: { lineStyle: { color: c.grid } }, axisLabel: { color: c.muted, fontSize: 11, formatter: compact } },
       tooltip: {
         trigger: "axis",
         confine: true,

@@ -76,7 +76,8 @@ export function CallPage({ uid }: { uid: string }) {
 
 function Copyable({ value }: { value: string }) {
   return (
-    <button type="button" className="text-ink-3 hover:text-ink align-middle ml-1" aria-label={`Copy ${value}`} title="Copy" onClick={() => navigator.clipboard?.writeText(value)}>
+    // The padding gives a 24 px target; the negative margins keep the icon where it was.
+    <button type="button" className="inline-flex p-1.5 -my-1.5 -mr-1.5 -ml-0.5 rounded text-ink-3 hover:text-ink align-middle" aria-label={`Copy ${value}`} title="Copy" onClick={() => navigator.clipboard?.writeText(value)}>
       <Copy size={12} />
     </button>
   );
@@ -298,7 +299,7 @@ function TimelineTab({ call: c, flow, tz }: { call: Call; flow: Flow; tz: string
     <div className="pl-14 pr-3">
       <div className="relative h-5 border-b border-line-2 mb-3">
         {ticks.map((t, i) => (
-          <span key={i} className="absolute text-[11px] text-ink-3 tnum -translate-x-1/2" style={{ left: pct(t) }}>{fmtHMS(t / 1000, tz)}</span>
+          <span key={i} className="absolute text-[11.5px] text-ink-3 tnum -translate-x-1/2" style={{ left: pct(t) }}>{fmtHMS(t / 1000, tz)}</span>
         ))}
       </div>
       <div className="space-y-3">
@@ -307,7 +308,7 @@ function TimelineTab({ call: c, flow, tz }: { call: Call; flow: Flow; tz: string
             <span className="absolute -left-12 top-1 text-xs text-ink-2">{r.leg} leg</span>
             {r.seg.map((s) => (
               <div key={s.label} title={`${s.label}: ${fmtDuration((s.to - s.from) / 1000)}`} className="absolute top-0 bottom-0 rounded-sm flex items-center overflow-hidden" style={{ left: pct(s.from), width: width(s.from, s.to), background: s.color }}>
-                <span className="px-1.5 text-[11px] text-black/80 truncate">{s.label}</span>
+                <span className="px-1.5 text-[11.5px] text-black/80 truncate">{s.label}</span>
               </div>
             ))}
             {r.leg === "A" && holds.map((m) => <div key={m.idx} title="Hold" className="absolute -top-1 -bottom-1 w-0.5 bg-[var(--leg-b)]" style={{ left: pct(usOf(m.ts)) }} />)}
@@ -363,8 +364,8 @@ function StreamChart({ title, streams, field, unit, height = 130 }: { title: str
       animation: false,
       textStyle: { fontFamily: "'Inter Variable', sans-serif" },
       grid: { left: 40, right: 8, top: 6, bottom: 18 },
-      xAxis: { type: "time", axisLine: { lineStyle: { color: axis } }, axisTick: { show: false }, splitLine: { show: false }, axisLabel: { color: muted, fontSize: 10.5, hideOverlap: true, formatter: (v: number) => fmtHMS(v, tz) } },
-      yAxis: { type: "value", scale: field === 1, splitNumber: 3, axisLine: { show: false }, axisTick: { show: false }, splitLine: { lineStyle: { color: grid } }, axisLabel: { color: muted, fontSize: 10.5 } },
+      xAxis: { type: "time", axisLine: { lineStyle: { color: axis } }, axisTick: { show: false }, splitLine: { show: false }, axisLabel: { color: muted, fontSize: 11, hideOverlap: true, formatter: (v: number) => fmtHMS(v, tz) } },
+      yAxis: { type: "value", scale: field === 1, splitNumber: 3, axisLine: { show: false }, axisTick: { show: false }, splitLine: { lineStyle: { color: grid } }, axisLabel: { color: muted, fontSize: 11 } },
       tooltip: { trigger: "axis", confine: true, backgroundColor: raised, borderColor: axis, textStyle: { color: ink, fontSize: 12 }, formatter: (p: any[]) => `${fmtHMS(p[0].value[0], tz)}<br/>${p.map((x) => `${x.seriesName}: <b>${x.value[1].toFixed(field === 1 ? 2 : 1)}${unit}</b>`).join("<br/>")}` },
       series: streams.filter((s) => s.points.length).map((s, i) => ({ name: s.label, type: "line", showSymbol: false, lineStyle: { width: 2, color: colors[i] }, itemStyle: { color: colors[i] }, data: s.points.map((p: number[]) => [p[0], Number(p[field].toFixed(3))]) })),
     };

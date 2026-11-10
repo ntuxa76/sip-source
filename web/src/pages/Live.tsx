@@ -121,7 +121,7 @@ export function LivePage() {
         title="Live capture"
         description={`Runs only while started, and stops by itself after ${settings.live_idle_minutes} minutes.`}
         right={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Badge tone={streaming ? (connected ? (paused ? "warn" : "good") : "info") : "neutral"}>{streaming ? (connected ? (paused ? "Paused" : "Streaming") : "Connecting") : "Stopped"}</Badge>
             <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Filter number, node, UA, capture ID" aria-label="Filter dialogs" className="h-7 rounded-md bg-raised border border-line-2 px-2 text-xs w-[230px]" />
             {streaming ? (

@@ -36,7 +36,7 @@ export function SubscribersPage() {
           right={
             <div className="flex items-center gap-2">
               {list.data.facets.status.map((f: any) => (
-                <button type="button" key={f.value} onClick={() => setStatus(status === f.value ? "" : f.value)} className={`px-1.5 rounded ${status === f.value ? "bg-accent-wash text-ink" : "hover:bg-sunken"}`}>
+                <button type="button" key={f.value} onClick={() => setStatus(status === f.value ? "" : f.value)} className={`h-6 px-1.5 rounded ${status === f.value ? "bg-accent-wash text-ink" : "hover:bg-sunken"}`}>
                   {f.value.replace("_", " ")} <span className="tnum">{f.count.toLocaleString()}</span>
                 </button>
               ))}
@@ -97,7 +97,7 @@ function StateTimeline({ segments, from, to, tz }: { segments: any[]; from: numb
       </div>
       <div className="relative h-4 mt-1">
         {ticks.map((t, i) => (
-          <span key={i} className={`absolute text-[11px] text-ink-3 tnum ${i === 0 ? "" : i === 6 ? "-translate-x-full" : "-translate-x-1/2"}`} style={{ left: `${(i / 6) * 100}%` }}>{fmtHM(t, tz)}</span>
+          <span key={i} className={`absolute text-[11.5px] text-ink-3 tnum ${i === 0 ? "" : i === 6 ? "-translate-x-full" : "-translate-x-1/2"}`} style={{ left: `${(i / 6) * 100}%` }}>{fmtHM(t, tz)}</span>
         ))}
       </div>
       <div className="flex gap-4 mt-1 text-xs text-ink-2">

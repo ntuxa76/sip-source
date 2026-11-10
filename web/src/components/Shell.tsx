@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, Outlet, useNavigate, useRouterState, useSearch } from "@tanstack/react-router";
-import { BarChart3, Check, ChevronDown, ChevronLeft, ChevronRight, Compass, Database, LayoutDashboard, LogOut, Moon, Radio, RefreshCw, Search, Server, Settings, Sun, Users } from "lucide-react";
+import { BarChart3, Check, ChevronDown, ChevronLeft, ChevronRight, Compass, Database, LayoutDashboard, LogOut, Menu, Moon, Radio, RefreshCw, Search, Server, Settings, Sun, Users, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { get, post } from "../lib/api";
@@ -67,6 +67,28 @@ export function Shell() {
   const logout = useMutation({ mutationFn: () => post("/auth/logout"), onSuccess: () => client.invalidateQueries() });
   const active = (to: string) => (to === "/" ? path === "/" : path.startsWith(to.split("/").slice(0, 2).join("/")));
   const noStorage = storage.data?.type === "none";
+  // Below 1024 px the sidebar is a drawer opened from the top bar.
+  const [menuOpen, setMenuOpen] = useState(false);
+  const navRef = useRef<HTMLElement>(null);
+
+  useEffect(() => setMenuOpen(false), [path]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    navRef.current?.querySelector("a")?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      setMenuOpen(false);
+      document.getElementById("menu-button")?.focus();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [menuOpen]);
+
+  const skipToContent = (e: React.MouseEvent) => {
+    e.preventDefault();
+    document.getElementById("main-scroll")?.focus();
+  };
 
   if (search.kiosk) {
     return (
@@ -78,15 +100,20 @@ export function Shell() {
 
   return (
     <div className="flex h-full">
-      <aside className="w-[232px] shrink-0 bg-surface border-r border-line flex flex-col">
+      <a href="#main-scroll" onClick={skipToContent} className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:bg-raised focus:border focus:border-line-2 focus:rounded-lg focus:px-3 focus:py-2 focus:shadow-lg">
+        Skip to content
+      </a>
+      {menuOpen && <div className="lg:hidden fixed inset-0 z-30 bg-black/40" onClick={() => setMenuOpen(false)} aria-hidden />}
+      <aside id="sidebar" className={`${menuOpen ? "max-lg:fixed max-lg:inset-y-0 max-lg:left-0 max-lg:z-40 max-lg:shadow-xl" : "max-lg:hidden"} w-[232px] shrink-0 bg-surface border-r border-line flex flex-col`}>
         <div className="h-[60px] flex items-center gap-2.5 px-4 shrink-0">
           <img src="/logo.png" alt="" width={30} height={30} className="shrink-0" />
           <span className="font-semibold text-[15px] tracking-tight truncate">{settings.app_name}</span>
+          <button type="button" onClick={() => setMenuOpen(false)} aria-label="Close menu" className="lg:hidden ml-auto p-1.5 -mr-1.5 rounded-lg hover:bg-sunken text-ink-2"><X size={18} /></button>
         </div>
-        <nav className="flex-1 px-3 pb-3 overflow-y-auto">
+        <nav ref={navRef} className="flex-1 px-3 pb-3 overflow-y-auto">
           {nav.map((g) => (
             <div key={g.group} className="mt-3 first:mt-1">
-              <div className="px-2.5 pb-1.5 text-[10.5px] font-medium uppercase tracking-[0.06em] text-ink-3">{g.group}</div>
+              <div className="px-2.5 pb-1.5 text-[11.5px] font-medium uppercase tracking-[0.06em] text-ink-3">{g.group}</div>
               <div className="space-y-0.5">
                 {g.items.map((n) => (
                   <Link
@@ -110,21 +137,21 @@ export function Shell() {
               <span className="w-8 h-8 shrink-0 rounded-full bg-accent-wash text-accent text-[12px] font-semibold flex items-center justify-center" aria-hidden>{initials(me.display_name || me.username)}</span>
               <span className="min-w-0">
                 <span className="block truncate font-medium text-[12.5px] leading-4">{me.display_name || me.username}</span>
-                <span className="block truncate text-[11px] text-ink-3 leading-4">{me.role}</span>
+                <span className="block truncate text-[11.5px] text-ink-3 leading-4">{me.role}</span>
               </span>
             </Link>
-            <button type="button" onClick={toggleTheme} aria-label="Switch theme" title="Switch theme" className="p-1.5 rounded-lg hover:bg-sunken text-ink-2">
+            <button type="button" onClick={toggleTheme} aria-label="Switch theme" title="Switch theme" className="p-[5px] rounded-lg hover:bg-sunken text-ink-2">
               {theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
             </button>
-            <button type="button" onClick={() => logout.mutate()} aria-label="Sign out" title="Sign out" className="p-1.5 rounded-lg hover:bg-sunken text-ink-2"><LogOut size={15} /></button>
+            <button type="button" onClick={() => logout.mutate()} aria-label="Sign out" title="Sign out" className="p-[5px] rounded-lg hover:bg-sunken text-ink-2"><LogOut size={15} /></button>
           </div>
         </div>
       </aside>
       <div className="flex-1 min-w-0 flex flex-col">
-        <TopBar />
-        {settings.banner_text && <div className="bg-warn-wash text-warn text-xs px-5 py-1.5 shrink-0">{settings.banner_text}</div>}
-        {noStorage && <div className="bg-warn-wash text-warn text-xs px-5 py-1.5 shrink-0">No ClickHouse is selected, so captured traffic is not being stored. {can("storage_manage") ? <Link to="/admin/$section" params={{ section: "storage" } as any} className="underline">Select one on the Storage page</Link> : "Ask an administrator to select one."}.</div>}
-        <main className="flex-1 min-h-0 overflow-auto p-5" id="main-scroll">
+        <TopBar menuOpen={menuOpen} onMenu={() => setMenuOpen(true)} />
+        {settings.banner_text && <div className="bg-warn-wash text-warn text-xs px-3 sm:px-5 py-1.5 shrink-0">{settings.banner_text}</div>}
+        {noStorage && <div className="bg-warn-wash text-warn text-xs px-3 sm:px-5 py-1.5 shrink-0">No ClickHouse is selected, so captured traffic is not being stored. {can("storage_manage") ? <Link to="/admin/$section" params={{ section: "storage" } as any} className="underline">Select one on the Storage page</Link> : "Ask an administrator to select one."}.</div>}
+        <main className="flex-1 min-h-0 overflow-auto p-3 sm:p-5 focus:outline-none" id="main-scroll" tabIndex={-1}>
           <Outlet />
         </main>
       </div>
@@ -132,7 +159,7 @@ export function Shell() {
   );
 }
 
-function TopBar() {
+function TopBar({ menuOpen, onMenu }: { menuOpen: boolean; onMenu: () => void }) {
   const { can } = usePrefs();
   const navigate = useNavigate();
   const search = useSearch({ strict: false }) as { q?: string; from?: string; to?: string };
@@ -172,8 +199,11 @@ function TopBar() {
     : [];
 
   return (
-    <header className="h-[60px] shrink-0 bg-surface border-b border-line flex items-center gap-3 px-5">
-      <form onSubmit={submit} className="relative flex-1 max-w-[720px]">
+    <header className="shrink-0 bg-surface border-b border-line flex flex-wrap lg:flex-nowrap items-center gap-x-3 gap-y-2 px-3 sm:px-5 py-2.5 lg:py-0 lg:h-[60px]">
+      <button id="menu-button" type="button" onClick={onMenu} aria-label="Open menu" aria-expanded={menuOpen} aria-controls="sidebar" className="lg:hidden p-1.5 -ml-1 rounded-lg hover:bg-sunken text-ink-2">
+        <Menu size={18} />
+      </button>
+      <form onSubmit={submit} className="relative flex-1 min-w-[200px] max-w-[720px]">
         <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-3" aria-hidden />
         <input
           ref={input}
@@ -184,11 +214,11 @@ function TopBar() {
           spellCheck={false}
           aria-label="Universal search"
           placeholder={browse ? 'Paste a number, Call-ID or IP, or filter: capture:201 trunk:"Carrier-X" status:5xx' : "Enter the customer's number"}
-          className="w-full h-9 rounded-lg bg-sunken border border-line pl-9 pr-9 font-mono text-[12.5px] placeholder:font-sans placeholder:text-ink-3 focus:bg-raised focus:border-accent focus:outline-none"
+          className="w-full h-9 rounded-lg bg-sunken border border-line pl-9 pr-9 font-mono text-[12.5px] placeholder:font-sans placeholder:text-ink-3 focus:bg-raised focus:border-accent"
         />
-        <kbd className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[11px] text-ink-3 bg-raised border border-line-2 rounded-md px-1.5 leading-4">/</kbd>
+        <kbd className="max-sm:hidden absolute right-2.5 top-1/2 -translate-y-1/2 text-[11.5px] text-ink-3 bg-raised border border-line-2 rounded-md px-1.5 leading-4">/</kbd>
         {suggestions.length > 0 && (
-          <ul className="absolute z-30 top-full mt-1.5 left-0 w-[380px] bg-raised border border-line rounded-xl shadow-lg p-1">
+          <ul className="absolute z-30 top-full mt-1.5 left-0 w-[380px] max-w-[calc(100vw-24px)] bg-raised border border-line rounded-xl shadow-lg p-1">
             {suggestions.map((f: any) => (
               <li key={f.field}>
                 <button
@@ -207,7 +237,7 @@ function TopBar() {
           </ul>
         )}
       </form>
-      <div className="flex-1" />
+      <div className="hidden lg:block flex-1" />
       <SourcePicker />
       <TimePicker />
     </header>
@@ -221,6 +251,7 @@ function SourcePicker() {
   const { data } = useQuery({ queryKey: ["sources"], queryFn: () => get("/sources"), refetchInterval: 30_000 });
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const alignLeft = useOpensLeft(ref, open, 280);
   useEffect(() => {
     const click = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
@@ -239,7 +270,7 @@ function SourcePicker() {
         <ChevronDown size={13} className="text-ink-3" aria-hidden />
       </Button>
       {open && (
-        <div className="absolute z-30 right-0 mt-1.5 w-[280px] bg-raised border border-line rounded-xl shadow-lg p-1" role="listbox">
+        <div className={`absolute z-30 ${alignLeft ? "left-0" : "right-0"} mt-1.5 w-[280px] max-w-[calc(100vw-24px)] bg-raised border border-line rounded-xl shadow-lg p-1`} role="listbox">
           <button type="button" role="option" aria-selected={!source} onClick={() => { setSource(""); setOpen(false); }} className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-left hover:bg-sunken ${!source ? "font-medium" : ""}`}>
             <span className="flex-1">All sources</span>
             {!source && <Check size={14} className="text-accent" aria-hidden />}
@@ -251,7 +282,7 @@ function SourcePicker() {
                 {dot(x.status)}
                 <span className="min-w-0 flex-1">
                   <span className={`block truncate ${x.ip === source ? "font-medium" : ""}`}>{x.label}</span>
-                  {x.alias && <span className="block font-mono text-[11px] text-ink-3">{x.ip}</span>}
+                  {x.alias && <span className="block font-mono text-[11.5px] text-ink-3">{x.ip}</span>}
                 </span>
                 {x.ip === source && <Check size={14} className="text-accent shrink-0" aria-hidden />}
               </button>
@@ -267,6 +298,15 @@ function SourcePicker() {
       )}
     </div>
   );
+}
+
+/** A right-aligned dropdown runs off the left edge when its button sits near the left, as on phones. */
+function useOpensLeft(ref: React.RefObject<HTMLElement | null>, open: boolean, width: number) {
+  const [left, setLeft] = useState(false);
+  useEffect(() => {
+    if (open && ref.current) setLeft(ref.current.getBoundingClientRect().right < width + 12);
+  }, [open, ref, width]);
+  return left;
 }
 
 const QUICK = [
@@ -308,6 +348,8 @@ export function TimePicker() {
   const { tz, savePrefs, refreshMs, setRefreshMs, settings } = usePrefs();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const rangeRef = useRef<HTMLDivElement>(null);
+  const alignLeft = useOpensLeft(rangeRef, open, 320);
   const now = Date.now();
   const [a, setA] = useState("");
   const [b, setB] = useState("");
@@ -343,16 +385,16 @@ export function TimePicker() {
 
   return (
     <div className="flex items-center gap-1.5" ref={ref}>
-      <Button variant="ghost" className="!px-1" onClick={() => step(-1)} aria-label="Step back one range">
+      <Button variant="ghost" className="!px-1.5" onClick={() => step(-1)} aria-label="Step back one range">
         <ChevronLeft size={15} />
       </Button>
-      <div className="relative">
+      <div className="relative" ref={rangeRef}>
         <Button onClick={() => setOpen((v) => !v)} aria-expanded={open}>
           <span>{rangeLabel(from, to, tz)}</span>
-          <span className="text-ink-3 font-normal">{tz}</span>
+          <span className="text-ink-3 font-normal max-sm:hidden">{tz}</span>
         </Button>
         {open && (
-          <div className="absolute z-30 right-0 mt-1.5 w-[320px] bg-raised border border-line rounded-xl shadow-lg p-2.5">
+          <div className={`absolute z-30 ${alignLeft ? "left-0" : "right-0"} mt-1.5 w-[320px] max-w-[calc(100vw-24px)] bg-raised border border-line rounded-xl shadow-lg p-2.5`}>
             <div className="grid grid-cols-2 gap-px">
               {QUICK.map((q) => (
                 <button
@@ -395,7 +437,7 @@ export function TimePicker() {
           </div>
         )}
       </div>
-      <Button variant="ghost" className="!px-1" onClick={() => step(1)} aria-label="Step forward one range" disabled={to === "now"}>
+      <Button variant="ghost" className="!px-1.5" onClick={() => step(1)} aria-label="Step forward one range" disabled={to === "now"}>
         <ChevronRight size={15} />
       </Button>
       <span className="flex items-center gap-1 text-ink-3">

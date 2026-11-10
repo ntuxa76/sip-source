@@ -108,7 +108,7 @@ function TextFilter({ label, q, field, op = ":", placeholder, type = "text", suf
   return (
     <label className="block">
       <span className="text-xs text-ink-2">{label}</span>
-      <input type={type} value={value} onChange={(e) => setValue(e.target.value)} onBlur={apply} onKeyDown={(e) => e.key === "Enter" && apply()} placeholder={placeholder} spellCheck={false} className="w-full h-7 rounded-md bg-sunken border border-line px-2 font-mono text-xs focus:border-accent focus:outline-none" />
+      <input type={type} value={value} onChange={(e) => setValue(e.target.value)} onBlur={apply} onKeyDown={(e) => e.key === "Enter" && apply()} placeholder={placeholder} spellCheck={false} className="w-full h-7 rounded-md bg-sunken border border-line px-2 font-mono text-xs focus:border-accent" />
     </label>
   );
 }
@@ -117,28 +117,28 @@ function Section({ title, count, children, defaultOpen = true }: { title: string
   const [open, setOpen] = useState(defaultOpen);
   return (
     <section className="border-b border-line last:border-b-0 py-2">
-      <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className="flex items-center gap-1 w-full text-left font-medium text-[12.5px]">
+      <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className="flex items-center gap-1 w-full min-h-6 text-left font-medium text-[12.5px]">
         {open ? <ChevronDown size={13} aria-hidden /> : <ChevronRight size={13} aria-hidden />}
         <span className="flex-1">{title}</span>
-        {count ? <span className="bg-accent text-white rounded-full px-1.5 text-[10.5px] leading-[16px] tnum">{count}</span> : null}
+        {count ? <span className="bg-accent text-white rounded-full px-1.5 text-[11.5px] leading-[16px] tnum">{count}</span> : null}
       </button>
       {open && <div className="mt-1.5">{children}</div>}
     </section>
   );
 }
 
-function FilterPanel({ q, data, facets, onChange, onFacets }: { q: string; data: any; facets: string[]; onChange: (next: string) => void; onFacets: (f: string[]) => void }) {
+function FilterPanel({ q, data, facets, open, onChange, onFacets }: { q: string; data: any; facets: string[]; open: boolean; onChange: (next: string) => void; onFacets: (f: string[]) => void }) {
   const [customizing, setCustomizing] = useState(false);
   const ref = useClickAway(() => setCustomizing(false));
   const tokens = tokenize(q).map(parseToken).filter(Boolean);
 
   return (
-    <aside className="w-[272px] shrink-0 sticky top-0 self-start max-h-[calc(100vh-90px)] flex flex-col bg-surface border border-line rounded-lg" aria-label="Search filters">
+    <aside id="search-filters" className={`${open ? "" : "max-md:hidden"} w-full md:w-[272px] shrink-0 md:sticky md:top-0 md:self-start max-h-[70vh] md:max-h-[calc(100vh-90px)] flex flex-col bg-surface border border-line rounded-lg`} aria-label="Search filters">
       <header className="flex items-center gap-2 px-3 h-10 border-b border-line shrink-0 relative" ref={ref}>
         <SlidersHorizontal size={14} className="text-accent" aria-hidden />
         <h2 className="font-semibold flex-1">Filters</h2>
-        {tokens.length > 0 && <button type="button" onClick={() => onChange("")} className="text-xs text-accent hover:underline">Clear all</button>}
-        <button type="button" onClick={() => setCustomizing(!customizing)} className="text-xs text-ink-2 hover:text-ink" aria-expanded={customizing}>Customize</button>
+        {tokens.length > 0 && <button type="button" onClick={() => onChange("")} className="h-6 text-xs text-accent hover:underline">Clear all</button>}
+        <button type="button" onClick={() => setCustomizing(!customizing)} className="h-6 text-xs text-ink-2 hover:text-ink" aria-expanded={customizing}>Customize</button>
         {customizing && (
           <div className="absolute z-20 top-full right-2 mt-1 w-[220px] bg-raised border border-line-2 rounded-md shadow-lg p-2.5">
             <p className="text-xs text-ink-3 mb-1.5">Choose which filter lists to show</p>
@@ -186,11 +186,11 @@ function FilterPanel({ q, data, facets, onChange, onFacets }: { q: string; data:
                   const on = hasValue(q, id, i.value, false);
                   const off = hasValue(q, id, i.value, true);
                   return (
-                    <li key={i.value} className="group/row relative flex items-center gap-1.5 py-[3px] pl-1 pr-1 rounded hover:bg-sunken text-xs">
+                    <li key={i.value} className="group/row relative flex items-center gap-1.5 min-h-6 py-[3px] pl-1 pr-1 rounded hover:bg-sunken text-xs">
                       <span className="absolute left-0 top-0 bottom-0 bg-accent/10 rounded" style={{ width: `${(i.count / max) * 100}%` }} aria-hidden />
                       <input type="checkbox" id={`f-${id}-${i.value}`} checked={on} disabled={i.value === "in progress"} onChange={() => onChange(toggleValue(q, id, i.value))} className="relative" />
                       <label htmlFor={`f-${id}-${i.value}`} className={`relative flex-1 truncate cursor-pointer ${off ? "line-through text-ink-3" : ""}`}>{i.label ?? i.value}</label>
-                      <button type="button" title={off ? "Stop excluding" : "Exclude this value"} aria-label={`Exclude ${i.value}`} onClick={() => onChange(toggleValue(q, id, i.value, true))} className={`relative ${off ? "text-crit" : "text-ink-3 opacity-0 group-hover/row:opacity-100 focus:opacity-100"}`}><Ban size={11} /></button>
+                      <button type="button" title={off ? "Stop excluding" : "Exclude this value"} aria-label={`Exclude ${i.value}`} onClick={() => onChange(toggleValue(q, id, i.value, true))} className={`relative -my-[3px] w-6 h-6 shrink-0 inline-flex items-center justify-center rounded ${off ? "text-crit" : "text-ink-3 opacity-0 group-hover/row:opacity-100 focus:opacity-100 [@media(hover:none)]:opacity-100"}`}><Ban size={11} /></button>
                       <span className="relative tnum text-ink-2">{i.count.toLocaleString()}</span>
                     </li>
                   );
@@ -206,7 +206,7 @@ function FilterPanel({ q, data, facets, onChange, onFacets }: { q: string; data:
 
 function ActiveFilters({ q, onChange }: { q: string; onChange: (next: string) => void }) {
   const raws = tokenize(q);
-  if (raws.length === 0) return <p className="text-ink-3 text-xs">No filters: showing every call in the time range. Use the panel on the left, or type in the search box.</p>;
+  if (raws.length === 0) return <p className="text-ink-3 text-xs">No filters: showing every call in the time range. Use the filter panel, or type in the search box.</p>;
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       {raws.map((raw) => {
@@ -295,6 +295,8 @@ export function SearchPage() {
   const { source } = useSource();
   const sort = search.sort ?? "start_ts";
   const dir = search.dir ?? "desc";
+  // On narrow screens the filter panel stays folded until asked for.
+  const [showFilters, setShowFilters] = useState(false);
 
   const { data, error, isFetching } = useQuery({
     queryKey: ["search", q, from, to, pageSize, page, tz, sort, dir, facets.join(","), source],
@@ -315,11 +317,17 @@ export function SearchPage() {
   const pad = density === "compact" ? "[&_td]:!py-[3px] [&_th]:!py-1" : "";
   const csvColumns = columnIds.join(",");
   const lastPage = Math.max(0, Math.ceil(data.total / pageSize) - 1);
+  const activeFilters = tokenize(q).length;
 
   return (
-    <div className={`flex gap-3 items-start ${isFetching ? "opacity-95" : ""}`}>
-      <FilterPanel q={q} data={data} facets={facets} onChange={setQ} onFacets={(f) => savePrefs({ searchFacets: f })} />
-      <div className="flex-1 min-w-0 space-y-3">
+    <div className={`flex flex-col md:flex-row gap-3 md:items-start ${isFetching ? "opacity-95" : ""}`}>
+      <h1 className="sr-only">Search calls</h1>
+      <Button className="md:hidden self-start" onClick={() => setShowFilters(!showFilters)} aria-expanded={showFilters} aria-controls="search-filters">
+        <SlidersHorizontal size={13} />
+        {activeFilters > 0 ? `Filters (${activeFilters})` : "Filters"}
+      </Button>
+      <FilterPanel q={q} data={data} facets={facets} open={showFilters} onChange={setQ} onFacets={(f) => savePrefs({ searchFacets: f })} />
+      <div className="flex-1 w-full min-w-0 space-y-3">
         <ActiveFilters q={q} onChange={setQ} />
         {(problems.length > 0 || detected.length > 0) && (
           <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
@@ -337,7 +345,7 @@ export function SearchPage() {
 
         {data.subscribers.map((s: any) => (
           <Card key={s.number}>
-            <div className="flex items-center gap-3 px-3.5 py-2.5">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3.5 py-2.5">
               <span className="text-ink-3 text-xs">Subscriber</span>
               <Link to="/subscribers/$number" params={{ number: s.number }} className="font-mono font-medium hover:underline">{s.number}</Link>
               <RegStatus status={s.status} />
@@ -353,7 +361,7 @@ export function SearchPage() {
         </Card>
 
         <Card>
-          <div className="flex items-center justify-end gap-2 px-3 py-2 border-b border-line">
+          <div className="flex flex-wrap items-center justify-end gap-2 px-3 py-2 border-b border-line">
             <SavedSearches q={q} onLoad={setQ} />
             <ColumnPicker columns={columnIds} onChange={(c) => savePrefs({ searchColumns: c })} />
             <Select label="Row density" value={density} onChange={(v) => savePrefs({ density: v as "compact" | "comfortable" })} options={[{ value: "comfortable", label: "Comfortable" }, { value: "compact", label: "Compact" }]} />

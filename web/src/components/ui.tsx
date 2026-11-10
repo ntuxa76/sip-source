@@ -6,9 +6,9 @@ export function Card({ title, right, children, className = "" }: { title?: React
   return (
     <section className={`bg-surface border border-line rounded-xl shadow-card ${className}`}>
       {(title || right) && (
-        <header className="flex items-center justify-between gap-3 px-4 pt-3.5 pb-2">
+        <header className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 px-4 pt-3.5 pb-2">
           <h2 className="font-semibold text-[14px] text-ink tracking-tight">{title}</h2>
-          <div className="flex items-center gap-2 text-ink-3 text-xs">{right}</div>
+          <div className="flex flex-wrap items-center gap-2 text-ink-3 text-xs">{right}</div>
         </header>
       )}
       {children}
@@ -18,7 +18,7 @@ export function Card({ title, right, children, className = "" }: { title?: React
 
 export function PageHeader({ title, description, right }: { title: string; description?: ReactNode; right?: ReactNode }) {
   return (
-    <div className="flex items-end justify-between gap-4 mb-4">
+    <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2 mb-4">
       <div>
         <h1 className="text-[22px] leading-7 font-semibold tracking-tight">{title}</h1>
         {description && <p className="text-ink-2 mt-0.5">{description}</p>}
@@ -133,7 +133,7 @@ export function Button({ children, variant = "default", className = "", ...rest 
     ghost: "text-ink-2 hover:bg-sunken hover:text-ink",
   };
   return (
-    <button {...rest} className={`inline-flex items-center gap-1.5 rounded-lg px-3 h-8 text-[12.5px] font-medium disabled:opacity-50 ${styles[variant]} ${className}`}>
+    <button {...rest} className={`inline-flex items-center gap-1.5 rounded-lg px-3 h-8 text-[12.5px] font-medium whitespace-nowrap disabled:opacity-50 ${styles[variant]} ${className}`}>
       {children}
     </button>
   );
@@ -192,10 +192,10 @@ export function Select({ value, onChange, options, label, className = "" }: { va
   );
 }
 
-export function Toggle({ checked, onChange, children }: { checked: boolean; onChange: (v: boolean) => void; children: ReactNode }) {
+export function Toggle({ checked, onChange, children, label }: { checked: boolean; onChange: (v: boolean) => void; children: ReactNode; label?: string }) {
   return (
-    <label className="inline-flex items-center gap-1.5 text-[12.5px] text-ink-2 cursor-pointer select-none">
-      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="accent-[var(--accent)]" />
+    <label className="inline-flex items-center gap-1.5 min-h-6 text-[12.5px] text-ink-2 cursor-pointer select-none">
+      <input type="checkbox" aria-label={label} checked={checked} onChange={(e) => onChange(e.target.checked)} className="accent-[var(--accent)]" />
       {children}
     </label>
   );

@@ -1,4 +1,6 @@
 import { sql, StandardSQL } from "@codemirror/lang-sql";
+import { syntaxHighlighting } from "@codemirror/language";
+import { classHighlighter } from "@lezer/highlight";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { basicSetup, EditorView } from "codemirror";
 import { ArrowLeft, Play } from "lucide-react";
@@ -11,7 +13,7 @@ import { usePrefs, useRange } from "../lib/context";
 import { PANEL_TYPES, supportsSql, usesMetric } from "../lib/dashboard";
 import type { PanelDef } from "../lib/dashboard";
 
-const field = "w-full h-8 rounded-md bg-sunken border border-line px-2 focus:border-accent focus:outline-none";
+const field = "w-full h-8 rounded-md bg-sunken border border-line px-2 focus:border-accent";
 
 function Label({ text, children }: { text: string; children: React.ReactNode }) {
   return (
@@ -32,7 +34,7 @@ function SqlEditor({ value, onChange }: { value: string; onChange: (v: string) =
     if (!el.current) return;
     const created = new EditorView({
       doc: value,
-      extensions: [basicSetup, sql({ dialect: StandardSQL }), EditorView.updateListener.of((u) => u.docChanged && callback.current(u.state.doc.toString()))],
+      extensions: [basicSetup, sql({ dialect: StandardSQL }), syntaxHighlighting(classHighlighter), EditorView.updateListener.of((u) => u.docChanged && callback.current(u.state.doc.toString()))],
       parent: el.current,
     });
     view.current = created;

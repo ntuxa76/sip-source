@@ -1,4 +1,6 @@
 import { sql, StandardSQL } from "@codemirror/lang-sql";
+import { syntaxHighlighting } from "@codemirror/language";
+import { classHighlighter } from "@lezer/highlight";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { basicSetup, EditorView } from "codemirror";
 import { ChevronRight, Play } from "lucide-react";
@@ -26,7 +28,8 @@ export function WorkbenchPage() {
     if (!ready || !editorEl.current) return;
     const created = new EditorView({
       doc: library.data[0]?.sql ?? "",
-      extensions: [basicSetup, sql({ dialect: StandardSQL })],
+      // Token colours come from index.css, so they follow the light and dark themes.
+      extensions: [basicSetup, sql({ dialect: StandardSQL }), syntaxHighlighting(classHighlighter)],
       parent: editorEl.current,
     });
     view.current = created;
@@ -52,14 +55,14 @@ export function WorkbenchPage() {
   return (
     <div>
       <PageHeader title="SQL workbench" description="Read-only SQL. Macros {{from}}, {{to}} and {{tz}} follow the time picker." />
-      <div className="flex gap-3 items-start">
-        <aside className="w-[260px] shrink-0 bg-surface border border-line rounded-lg">
+      <div className="flex flex-col md:flex-row gap-3 md:items-start">
+        <aside className="w-full md:w-[260px] shrink-0 bg-surface border border-line rounded-lg">
           <div className="flex border-b border-line">
             {(["library", "schema"] as const).map((s) => (
               <button type="button" key={s} onClick={() => setSide(s)} className={`flex-1 py-2 capitalize text-[12.5px] ${side === s ? "font-medium border-b-2 border-accent -mb-px" : "text-ink-2"}`}>{s === "library" ? "Query library" : "Views"}</button>
             ))}
           </div>
-          <div className="p-2 max-h-[calc(100vh-180px)] overflow-y-auto">
+          <div className="p-2 max-h-[40vh] md:max-h-[calc(100vh-180px)] overflow-y-auto">
             {side === "library" && categories.map((c) => (
               <div key={c} className="mb-2">
                 <h3 className="text-ink-3 text-[11.5px] font-medium px-1.5 mb-0.5">{c}</h3>
@@ -89,7 +92,7 @@ export function WorkbenchPage() {
             ))}
           </div>
         </aside>
-        <div className="flex-1 min-w-0 space-y-3">
+        <div className="flex-1 w-full min-w-0 space-y-3">
           <Card>
             <div ref={editorEl} className="h-[220px] overflow-hidden rounded-t-lg" />
             <div className="flex items-center justify-between gap-3 px-3 py-2 border-t border-line">

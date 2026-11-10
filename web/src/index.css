@@ -18,7 +18,7 @@
   --accent: #0b5bd3;
   --accent-wash: #eaf2fe;
   --accent-soft: #bcd4fb;
-  --good: #11804a;
+  --good: #107a46;
   --good-wash: #e5f5ec;
   --warn: #8a5a00;
   --warn-wash: #fdf3dc;
@@ -115,10 +115,25 @@ button:disabled {
   cursor: not-allowed;
 }
 
-:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-  border-radius: 3px;
+/* In the base layer so an element's own rounded corners still win while it has focus. */
+@layer base {
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+    border-radius: 3px;
+  }
+}
+
+/* When the system asks for less motion, nothing spins or slides. Charts already draw without animation. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 .tnum {
@@ -169,7 +184,63 @@ button:disabled {
 }
 
 .cm-editor.cm-focused {
-  outline: none;
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* SQL syntax colours. Each one is at least 4.5:1 on the editor and active-line backgrounds. */
+:root {
+  --code-keyword: #0b5bd3;
+  --code-number: #107a46;
+  --code-string: #a8431a;
+  --code-type: #6250d6;
+  --code-comment: #6e6e7a;
+  --code-operator: #4f4f5a;
+  --code-invalid: #c22f36;
+}
+
+:root[data-theme="dark"] {
+  --code-keyword: #4d94f5;
+  --code-number: #4fc27f;
+  --code-string: #ec835a;
+  --code-type: #9085e9;
+  --code-comment: #8f8f9c;
+  --code-operator: #b9b9c4;
+  --code-invalid: #ef7377;
+}
+
+.cm-editor .tok-keyword {
+  color: var(--code-keyword);
+}
+
+.cm-editor .tok-number,
+.cm-editor .tok-bool,
+.cm-editor .tok-atom,
+.cm-editor .tok-literal {
+  color: var(--code-number);
+}
+
+.cm-editor .tok-string,
+.cm-editor .tok-string2 {
+  color: var(--code-string);
+}
+
+.cm-editor .tok-typeName {
+  color: var(--code-type);
+}
+
+.cm-editor .tok-comment {
+  color: var(--code-comment);
+  font-style: italic;
+}
+
+.cm-editor .tok-operator,
+.cm-editor .tok-punctuation {
+  color: var(--code-operator);
+}
+
+.cm-editor .tok-invalid {
+  color: var(--code-invalid);
 }
 
 .cm-scroller {

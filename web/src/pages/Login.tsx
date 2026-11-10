@@ -6,7 +6,7 @@ import { Button } from "../components/ui";
 import { post } from "../lib/api";
 import { applyTheme, resolveTheme } from "../lib/context";
 
-const field = "w-full h-10 rounded-lg bg-raised border border-line-2 px-3 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/15";
+const field = "w-full h-10 rounded-lg bg-raised border border-line-2 px-3 focus:border-accent";
 
 const POINTS = [
   { icon: Workflow, title: "Every call, every leg", text: "SIP ladders with both legs joined, findings and RTCP quality." },
