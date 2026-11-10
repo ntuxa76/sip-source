@@ -15,8 +15,6 @@ pub struct Engine {
     dir: PathBuf,
     port: u16,
     password: String,
-    /// For user-written SQL: may only read the capture database.
-    reader_password: String,
     child: Mutex<Option<Child>>,
     /// Whether the active storage wants the engine running. A crash restarts it only while true.
     wanted: AtomicBool,
@@ -27,17 +25,13 @@ pub struct Engine {
 impl Engine {
     pub fn new(binary: String, data_dir: &str, port: u16) -> Engine {
         // A fresh password every start: nothing outside this process ever needs it.
-        let secret = || {
-            let mut bytes = [0u8; 24];
-            rand::rngs::OsRng.fill_bytes(&mut bytes);
-            hex::encode(bytes)
-        };
-        Engine { binary, dir: PathBuf::from(data_dir).join("engine"), port, password: secret(), reader_password: secret(), child: Mutex::new(None), wanted: AtomicBool::new(false), starting: tokio::sync::Mutex::new(()) }
+        let mut bytes = [0u8; 24];
+        rand::rngs::OsRng.fill_bytes(&mut bytes);
+        Engine { binary, dir: PathBuf::from(data_dir).join("engine"), port, password: hex::encode(bytes), child: Mutex::new(None), wanted: AtomicBool::new(false), starting: tokio::sync::Mutex::new(()) }
     }
 
     pub fn client(&self, database: &str) -> Result<Ch, String> {
         Ch::new(format!("http://127.0.0.1:{}", self.port), database.to_string(), "default".into(), self.password.clone())
-            .map(|c| c.with_reader("reader".into(), self.reader_password.clone()))
     }
 
     fn write_config(&self) -> Result<PathBuf, String> {
@@ -88,19 +82,10 @@ impl Engine {
             <profile>default</profile>
             <quota>default</quota>
         </default>
-        <reader>
-            <password_sha256_hex>{}</password_sha256_hex>
-            <networks><ip>127.0.0.1</ip><ip>::1</ip></networks>
-            <profile>default</profile>
-            <quota>default</quota>
-            <grants><query>GRANT SELECT ON {}.*</query></grants>
-        </reader>
     </users>
 </clickhouse>
 "#,
-            hex::encode(Sha256::digest(self.password.as_bytes())),
-            hex::encode(Sha256::digest(self.reader_password.as_bytes())),
-            crate::storage::LOCAL_DATABASE,
+            hex::encode(Sha256::digest(self.password.as_bytes()))
         );
         let file = d.join("config.xml");
         std::fs::write(&file, config).map_err(|e| format!("can't write {}: {e}", file.display()))?;

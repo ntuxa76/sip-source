@@ -10,8 +10,6 @@ pub struct Ch {
     pub database: String,
     pub username: String,
     pub password: String,
-    /// A separate account for user-written SQL, when the storage has one. It can only read.
-    reader: Option<(String, String)>,
     client: reqwest::Client,
 }
 
@@ -31,27 +29,18 @@ pub struct Table {
 impl Ch {
     pub fn new(url: String, database: String, username: String, password: String) -> Result<Ch, String> {
         let client = reqwest::Client::builder().timeout(Duration::from_secs(600)).build().map_err(|e| e.to_string())?;
-        Ok(Ch { url, database, username, password, reader: None, client })
-    }
-
-    pub fn with_reader(mut self, username: String, password: String) -> Ch {
-        self.reader = Some((username, password));
-        self
+        Ok(Ch { url, database, username, password, client })
     }
 
     async fn post(&self, body: String, database: bool, timeout_s: u64, params: &[(&str, String)]) -> Result<String, String> {
-        self.post_as(&self.username, &self.password, body, database, timeout_s, params).await
-    }
-
-    async fn post_as(&self, username: &str, password: &str, body: String, database: bool, timeout_s: u64, params: &[(&str, String)]) -> Result<String, String> {
         let mut query: Vec<(&str, String)> = vec![("session_timezone", "UTC".into()), ("output_format_json_quote_64bit_integers", "0".into())];
         if database {
             query.push(("database", self.database.clone()));
         }
         query.extend(params.iter().cloned());
         let res = self.client.post(&self.url).timeout(Duration::from_secs(timeout_s + 5)).query(&query)
-            .header("X-ClickHouse-User", username)
-            .header("X-ClickHouse-Key", password)
+            .header("X-ClickHouse-User", &self.username)
+            .header("X-ClickHouse-Key", &self.password)
             .body(body).send().await
             .map_err(|e| format!("Could not reach ClickHouse: {e}"))?;
         let status = res.status();
@@ -59,11 +48,7 @@ impl Ch {
         if status.is_success() {
             Ok(text)
         } else {
-            // With a JSON output format the error arrives inside the body, so look for the message.
-            let line = text.lines().find(|l| l.contains("Exception")).or_else(|| text.lines().next()).unwrap_or("ClickHouse returned an error");
-            let line = line.trim().trim_start_matches("\"exception\":").trim().trim_matches(|c| c == '"' || c == ',');
-            let line = line.split(" (version ").next().unwrap_or(line);
-            Err(line.chars().take(600).collect())
+            Err(text.lines().next().unwrap_or("ClickHouse returned an error").chars().take(600).collect())
         }
     }
 
@@ -86,13 +71,10 @@ impl Ch {
         self.post(rows, true, 30, &[("query", sql), ("date_time_input_format", "best_effort".into())]).await.map(|_| ())
     }
 
-    /// User-written SQL. `readonly=1` makes the server refuse any change, any table function that
-    /// reaches outside (url, remote, mysql, file ...) and any setting changed from the query, so
-    /// the limits below hold.
+    /// User-written SQL. `readonly=2` makes the server itself refuse any change.
     pub async fn query_readonly(&self, sql: &str, timeout_s: u64, max_rows: usize) -> Result<Table, String> {
-        let (user, key) = self.reader.as_ref().map(|(u, k)| (u.as_str(), k.as_str())).unwrap_or((&self.username, &self.password));
-        let text = self.post_as(user, key, format!("{} FORMAT JSONCompact", sql.trim().trim_end_matches(';')), true, timeout_s, &[
-            ("readonly", "1".into()),
+        let text = self.post(format!("{} FORMAT JSONCompact", sql.trim().trim_end_matches(';')), true, timeout_s, &[
+            ("readonly", "2".into()),
             ("max_execution_time", timeout_s.to_string()),
             ("max_result_rows", (max_rows + 1).to_string()),
             ("result_overflow_mode", "break".into()),
@@ -174,18 +156,157 @@ pub async fn init_schema(ch: &Ch, r: &Retention) -> Result<(), String> {
     Ok(())
 }
 
-/// `schema/clickhouse/tables.sql`, with the retention settings filled in.
 fn tables(r: &Retention) -> Vec<String> {
-    let file = include_str!("../schema/clickhouse/tables.sql")
-        .replace("{retention_messages}", &r.messages.to_string())
-        .replace("{retention_registrations}", &r.registrations.to_string())
-        .replace("{retention_calls}", &r.calls.to_string())
-        .replace("{retention_qos}", &r.qos.to_string())
-        .replace("{retention_logs}", &r.logs.to_string())
-        .replace("{retention_metrics}", &r.metrics.to_string());
-    crate::db::statements(&file)
+    vec![
+        format!("CREATE TABLE IF NOT EXISTS sip_messages (
+            ts DateTime64(6, 'UTC') CODEC(Delta, ZSTD(1)),
+            ingest_ts DateTime64(3, 'UTC') CODEC(Delta, ZSTD(1)),
+            kind LowCardinality(String),
+            capture_id UInt32,
+            capture_point LowCardinality(String),
+            agent_ip LowCardinality(String),
+            src_ip String, src_port UInt16, dst_ip String, dst_port UInt16,
+            transport LowCardinality(String),
+            call_id String,
+            is_request Bool,
+            method LowCardinality(String),
+            status UInt16,
+            reason LowCardinality(String),
+            cseq_num UInt32,
+            cseq_method LowCardinality(String),
+            from_user String, from_user_n String, from_domain LowCardinality(String), from_tag String,
+            to_user String, to_user_n String, to_domain LowCardinality(String), to_tag String,
+            ruri_user String, ruri_user_n String, pai_user_n String,
+            user_agent LowCardinality(String),
+            via_branch String,
+            has_sdp Bool,
+            codecs Array(LowCardinality(String)),
+            sdp_ip String,
+            sdp_dir LowCardinality(String),
+            q850_cause UInt8,
+            x_cid String,
+            hep_cid String,
+            parse_error Bool,
+            payload String CODEC(ZSTD(3)),
+            INDEX idx_from from_user_n TYPE bloom_filter(0.01) GRANULARITY 4,
+            INDEX idx_to to_user_n TYPE bloom_filter(0.01) GRANULARITY 4,
+            INDEX idx_ruri ruri_user_n TYPE bloom_filter(0.01) GRANULARITY 4
+        ) ENGINE = MergeTree PARTITION BY toYYYYMMDD(ts) ORDER BY (call_id, ts)
+        TTL toDateTime(ts) + INTERVAL {} DAY", r.messages),
+        format!("CREATE TABLE IF NOT EXISTS registration_events (
+            ts DateTime64(6, 'UTC') CODEC(Delta, ZSTD(1)),
+            aor String, number String, grp LowCardinality(String),
+            contact String, src_ip String, src_port UInt16,
+            transport LowCardinality(String),
+            user_agent LowCardinality(String),
+            expires_requested UInt32, expires_granted UInt32,
+            result LowCardinality(String),
+            code UInt16,
+            rrd_ms Nullable(UInt32),
+            node LowCardinality(String),
+            capture_id UInt32,
+            agent_ip LowCardinality(String),
+            nat Bool,
+            challenged Bool
+        ) ENGINE = MergeTree PARTITION BY toYYYYMMDD(ts) ORDER BY (aor, ts)
+        TTL toDateTime(ts) + INTERVAL {} DAY", r.registrations),
+        format!("CREATE TABLE IF NOT EXISTS calls (
+            call_uid String,
+            version UInt64,
+            state LowCardinality(String),
+            start_ts DateTime64(6, 'UTC'),
+            ring_ts Nullable(DateTime64(6, 'UTC')),
+            answer_ts Nullable(DateTime64(6, 'UTC')),
+            end_ts Nullable(DateTime64(6, 'UTC')),
+            pdd_ms Nullable(UInt32), setup_ms Nullable(UInt32), talk_ms UInt64, egress_pdd_ms Nullable(UInt32),
+            caller String, caller_n String, callee String, callee_n String,
+            direction LowCardinality(String),
+            ingress_group LowCardinality(String), egress_group LowCardinality(String),
+            trunk LowCardinality(String), node LowCardinality(String), pbx LowCardinality(String),
+            backend LowCardinality(String),
+            capture_ids Array(UInt32), capture_points Array(LowCardinality(String)), agent_ips Array(LowCardinality(String)),
+            media_node LowCardinality(String),
+            final_status UInt16, final_reason LowCardinality(String), egress_status UInt16,
+            q850_cause UInt8, end_cause LowCardinality(String), hangup_side LowCardinality(String),
+            root_call_id String, b_call_id String, legs Array(String), link LowCardinality(String),
+            codecs Array(LowCardinality(String)),
+            ua_caller LowCardinality(String), ua_callee LowCardinality(String),
+            ua_vendor LowCardinality(String), ua_model LowCardinality(String),
+            caller_ip String, callee_ip String, caller_country LowCardinality(String),
+            min_mos Nullable(Float32), max_loss_pct Nullable(Float32), max_jitter_ms Nullable(Float32), max_rtt_ms Nullable(Float32),
+            mos_estimated Bool, media_a_to_b Bool, media_b_to_a Bool,
+            findings Array(LowCardinality(String)),
+            msg_count UInt32,
+            INDEX idx_uid call_uid TYPE bloom_filter(0.01) GRANULARITY 4,
+            INDEX idx_root root_call_id TYPE bloom_filter(0.01) GRANULARITY 4,
+            INDEX idx_caller caller_n TYPE bloom_filter(0.01) GRANULARITY 4,
+            INDEX idx_callee callee_n TYPE bloom_filter(0.01) GRANULARITY 4
+        ) ENGINE = ReplacingMergeTree(version) PARTITION BY toYYYYMM(start_ts) ORDER BY (toDate(start_ts), call_uid)
+        TTL toDateTime(start_ts) + INTERVAL {} DAY", r.calls),
+        format!("CREATE TABLE IF NOT EXISTS qos_reports (
+            ts DateTime64(6, 'UTC') CODEC(Delta, ZSTD(1)),
+            call_id String,
+            capture_id UInt32,
+            capture_point LowCardinality(String),
+            agent_ip LowCardinality(String),
+            source LowCardinality(String),
+            ssrc String,
+            src_ip String, dst_ip String,
+            packets UInt64, lost Int64,
+            loss_pct Float32, jitter_ms Float32, rtt_ms Nullable(Float32),
+            mos Nullable(Float32),
+            mos_estimated Bool
+        ) ENGINE = MergeTree PARTITION BY toYYYYMMDD(ts) ORDER BY (call_id, ts)
+        TTL toDateTime(ts) + INTERVAL {} DAY", r.qos),
+        format!("CREATE TABLE IF NOT EXISTS logs (
+            ts DateTime64(6, 'UTC') CODEC(Delta, ZSTD(1)),
+            call_id String,
+            capture_id UInt32,
+            agent_ip LowCardinality(String),
+            node LowCardinality(String),
+            severity LowCardinality(String),
+            message String CODEC(ZSTD(3))
+        ) ENGINE = MergeTree PARTITION BY toYYYYMMDD(ts) ORDER BY (call_id, ts)
+        TTL toDateTime(ts) + INTERVAL {} DAY", r.logs),
+        format!("CREATE TABLE IF NOT EXISTS system_1m (
+            bucket DateTime('UTC'),
+            metric LowCardinality(String),
+            dim LowCardinality(String),
+            name LowCardinality(String),
+            value Float64
+        ) ENGINE = MergeTree PARTITION BY toYYYYMM(bucket) ORDER BY (metric, dim, name, bucket)
+        TTL toDateTime(bucket) + INTERVAL {} DAY", r.metrics),
+        format!("CREATE TABLE IF NOT EXISTS reg_active_1m (
+            bucket DateTime('UTC'),
+            grp LowCardinality(String),
+            active UInt32
+        ) ENGINE = MergeTree PARTITION BY toYYYYMM(bucket) ORDER BY (grp, bucket)
+        TTL toDateTime(bucket) + INTERVAL {} DAY", r.metrics),
+    ]
 }
 
 fn views() -> Vec<String> {
-    crate::db::statements(include_str!("../schema/clickhouse/views.sql"))
+    vec![
+        "CREATE OR REPLACE VIEW v_calls AS SELECT * EXCEPT (version) FROM calls FINAL".to_string(),
+        "CREATE OR REPLACE VIEW v_findings AS SELECT arrayJoin(findings) AS code, * FROM v_calls".to_string(),
+        "CREATE OR REPLACE VIEW v_messages AS SELECT * EXCEPT (ingest_ts) FROM sip_messages".to_string(),
+        "CREATE OR REPLACE VIEW v_registrations AS SELECT * FROM registration_events".to_string(),
+        "CREATE OR REPLACE VIEW v_qos_reports AS SELECT * FROM qos_reports".to_string(),
+        "CREATE OR REPLACE VIEW v_logs AS SELECT * FROM logs".to_string(),
+        "CREATE OR REPLACE VIEW v_system_1m AS SELECT * FROM system_1m".to_string(),
+        "CREATE OR REPLACE VIEW v_kpi_reg_1m AS
+            SELECT toStartOfMinute(ts) AS bucket, grp, count() AS attempts,
+                   countIf(code BETWEEN 200 AND 299) AS success,
+                   countIf(code = 401) AS fail_401, countIf(code = 403) AS fail_403,
+                   countIf(code = 408) AS fail_408, countIf(code >= 500) AS fail_503,
+                   quantile(0.95)(rrd_ms) AS rrd_ms
+            FROM registration_events GROUP BY bucket, grp".to_string(),
+        "CREATE OR REPLACE VIEW v_reg_active_1m AS SELECT * FROM reg_active_1m".to_string(),
+        // One row per answered call per minute it was up.
+        "CREATE OR REPLACE VIEW v_kpi_concurrency_1m AS
+            SELECT toDateTime(arrayJoin(range(toUInt32(toStartOfMinute(assumeNotNull(answer_ts))), toUInt32(ifNull(end_ts, now())) + 1, 60)), 'UTC') AS bucket,
+                   direction, trunk, count() AS active
+            FROM v_calls WHERE answer_ts IS NOT NULL
+            GROUP BY bucket, direction, trunk".to_string(),
+    ]
 }

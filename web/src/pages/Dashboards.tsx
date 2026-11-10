@@ -8,7 +8,6 @@ import type { PanelContext } from "../components/Panel";
 import { Button, Card, Dialog, Empty, ErrorNote, Field, IconButton, Loading, PageHeader, Select, fieldClass, inputClass, popoverClass, useDismiss } from "../components/ui";
 import { del, get, post, put } from "../lib/api";
 import type { MetricInfo } from "../lib/api";
-import { homePath } from "../lib/access";
 import { usePrefs, useRange } from "../lib/context";
 import { GRID_COLS, GRID_MARGIN, ROW_HEIGHT, VARIABLE_FIELDS, emptyDashboard, newPanel, nextPanelId, panelHeightPx, parseRefresh } from "../lib/dashboard";
 import type { Dashboard, PanelDef, Variable } from "../lib/dashboard";
@@ -384,7 +383,7 @@ export function DashboardView({ id }: { id: string }) {
             <div className="flex flex-wrap gap-2">
               <Button onClick={() => setDialog("json")}><Download size={14} />JSON</Button>
               {can("dashboards_edit") && <Button onClick={() => setDialog("versions")}><History size={14} />History</Button>}
-              <Button onClick={toggleKiosk}><Maximize2 size={14} />{search.kiosk ? "Exit full screen" : "Full screen"}</Button>
+              <Button onClick={toggleKiosk}><Maximize2 size={14} />{search.kiosk ? "Exit TV mode" : "TV mode"}</Button>
               {can("dashboards_edit") && <Button variant="primary" onClick={() => setDraft(data.dashboard)}><Pencil size={14} />Edit</Button>}
             </div>
           )
@@ -421,7 +420,10 @@ export function DashboardView({ id }: { id: string }) {
 
 export function HomePage() {
   const { can, settings } = usePrefs();
-  if (!can("dashboards_view")) return <Navigate to={homePath(can, settings.sql_enabled)} replace />;
+  if (!can("dashboards_view")) {
+    if (can("subscribers_view")) return <Navigate to="/subscribers" />;
+    return <Navigate to="/preferences" />;
+  }
   return (
     <>
       <GettingStarted />
@@ -435,7 +437,7 @@ function GettingStarted() {
   const { data } = useQuery({ queryKey: ["sources"], queryFn: () => get("/sources"), refetchInterval: 15_000 });
   const [hidden, setHidden] = useState(() => {
     try {
-      return localStorage.getItem("ss-onboarding-hidden") === "1";
+      return localStorage.getItem("vp-onboarding-hidden") === "1";
     } catch {
       return false;
     }
@@ -447,7 +449,7 @@ function GettingStarted() {
   const hide = () => {
     setHidden(true);
     try {
-      localStorage.setItem("ss-onboarding-hidden", "1");
+      localStorage.setItem("vp-onboarding-hidden", "1");
     } catch {
       // Hidden for this visit only.
     }

@@ -4,7 +4,7 @@ import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { Copy, Download, FileText, X } from "lucide-react";
 import * as echarts from "echarts/core";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { FONT, chrome, escapeHtml, streamColors, tooltipChrome, useEChart } from "../components/charts";
+import { FONT, chrome, streamColors, tooltipChrome, useEChart } from "../components/charts";
 import { Ladder } from "../components/Ladder";
 import { Badge, Button, CallStateBadge, IconButton, Card, Empty, ErrorNote, FindingBadge, KV, Loading, MosCell, RegStatus, SeverityBadge, StatusChip, Tabs, Toggle } from "../components/ui";
 import { get } from "../lib/api";
@@ -366,7 +366,7 @@ function StreamChart({ title, streams, field, unit, height = 130 }: { title: str
       grid: { left: 40, right: 8, top: 6, bottom: 18 },
       xAxis: { type: "time", axisLine: { lineStyle: { color: axis } }, axisTick: { show: false }, splitLine: { show: false }, axisLabel: { color: muted, fontSize: 11, hideOverlap: true, formatter: (v: number) => fmtHMS(v, tz) } },
       yAxis: { type: "value", scale: field === 1, splitNumber: 3, axisLine: { show: false }, axisTick: { show: false }, splitLine: { lineStyle: { color: grid } }, axisLabel: { color: muted, fontSize: 11 } },
-      tooltip: { trigger: "axis", confine: true, ...tooltipChrome(c), formatter: (p: any[]) => `${fmtHMS(p[0].value[0], tz)}<br/>${p.map((x) => `${escapeHtml(String(x.seriesName))}: <b>${x.value[1].toFixed(field === 1 ? 2 : 1)}${unit}</b>`).join("<br/>")}` },
+      tooltip: { trigger: "axis", confine: true, ...tooltipChrome(c), formatter: (p: any[]) => `${fmtHMS(p[0].value[0], tz)}<br/>${p.map((x) => `${x.seriesName}: <b>${x.value[1].toFixed(field === 1 ? 2 : 1)}${unit}</b>`).join("<br/>")}` },
       series: streams.filter((s) => s.points.length).map((s, i) => ({ name: s.label, type: "line", showSymbol: false, lineStyle: { width: 1.5, color: colors[i] }, itemStyle: { color: colors[i] }, data: s.points.map((p: number[]) => [p[0], Number(p[field].toFixed(3))]) })),
     };
   }, [streams, field, unit, theme, tz]);

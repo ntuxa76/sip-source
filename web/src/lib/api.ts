@@ -199,7 +199,7 @@ export class ApiError extends Error {
 
 async function handle<T>(res: Response): Promise<T> {
   if (!res.ok) {
-    if (res.status === 401 && !res.url.includes("/auth/")) window.dispatchEvent(new Event("ss-signed-out"));
+    if (res.status === 401 && !res.url.includes("/auth/")) window.dispatchEvent(new Event("vp-signed-out"));
     const problem = await res.json().catch(() => null);
     throw new ApiError(problem?.detail ?? res.statusText, res.status);
   }
@@ -213,7 +213,7 @@ export function get<T = any>(path: string): Promise<T> {
 function send<T>(method: string, path: string, body?: unknown): Promise<T> {
   return fetch(`/api/v1${path}`, {
     method,
-    headers: { "Content-Type": "application/json", "X-SS-Request": "1" },
+    headers: { "Content-Type": "application/json", "X-VP-Request": "1" },
     body: body === undefined ? undefined : JSON.stringify(body),
   }).then((r) => handle<T>(r));
 }

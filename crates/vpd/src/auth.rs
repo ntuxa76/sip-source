@@ -60,29 +60,16 @@ pub fn all_permissions() -> Vec<String> {
     PERMISSIONS.iter().map(|p| p.id.to_string()).collect()
 }
 
-/// The roles a new installation starts with: (name, description, permissions, locked). Only the
-/// Administrator role is fixed; the others are starting points to edit, copy or delete.
 pub fn built_in_roles() -> Vec<(&'static str, &'static str, Vec<String>, bool)> {
     let list = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
     vec![
-        ("Administrator", "Full access, including users, roles, settings and storage.", all_permissions(), true),
-        ("Engineer", "Full troubleshooting: calls, SIP payloads, live capture, exports, dashboard editing, SQL and system pages.", list(&["search_all", "subscribers_view", "view_payload", "unmask_numbers", "live_view", "export_single", "export_bulk", "dashboards_view", "dashboards_edit", "dashboards_sql", "explore", "sql_workbench", "system_view"]), false),
-        ("Analyst", "Monitors traffic and investigates calls. Dashboards, search and live capture, without editing or SQL.", list(&["search_all", "subscribers_view", "view_payload", "unmask_numbers", "live_view", "export_single", "dashboards_view", "explore"]), false),
-        ("Support", "Looks up one subscriber at a time. The other party's number stays masked.", list(&["subscribers_view", "view_payload"]), false),
-        ("Viewer", "Read-only dashboards.", list(&["dashboards_view"]), false),
-        ("Auditor", "Read-only access to the audit log and system health.", list(&["audit_read", "system_view"]), false),
+        ("Admin", "Everything, including users and settings", all_permissions(), true),
+        ("Engineer", "All troubleshooting, editing dashboards, SQL", list(&["search_all", "subscribers_view", "view_payload", "unmask_numbers", "live_view", "export_single", "export_bulk", "dashboards_view", "dashboards_edit", "dashboards_sql", "explore", "sql_workbench", "system_view"]), false),
+        ("NOC Operator", "Dashboards and search", list(&["search_all", "subscribers_view", "view_payload", "unmask_numbers", "live_view", "export_single", "dashboards_view", "explore"]), false),
+        ("Support", "Helpdesk: looks up one number at a time, other party masked", list(&["subscribers_view", "view_payload"]), false),
+        ("Auditor", "Read-only access to the audit log and system pages", list(&["audit_read", "system_view"]), false),
     ]
 }
-
-/// Renames and descriptions of the roles that earlier versions created, applied once to existing
-/// installations: (old name, new name, old description).
-pub const ROLE_RENAMES: &[(&str, &str, &str)] = &[
-    ("Admin", "Administrator", "Everything, including users and settings"),
-    ("Engineer", "Engineer", "All troubleshooting, editing dashboards, SQL"),
-    ("NOC Operator", "Analyst", "Dashboards and search"),
-    ("Support", "Support", "Helpdesk: looks up one number at a time, other party masked"),
-    ("Auditor", "Auditor", "Read-only access to the audit log and system pages"),
-];
 
 pub fn hash_password(password: &str) -> Result<String, String> {
     let salt = SaltString::generate(&mut OsRng);
@@ -131,12 +118,6 @@ pub fn client_ip(app: &App, headers: &HeaderMap, peer: Option<SocketAddr>) -> St
         return first.trim().to_string();
     }
     peer.map(|p| p.ip().to_string()).unwrap_or_default()
-}
-
-/// Compares secrets in time that doesn't depend on where they differ.
-pub fn constant_eq(x: &str, y: &str) -> bool {
-    let (x, y) = (Sha256::digest(x.as_bytes()), Sha256::digest(y.as_bytes()));
-    x.iter().zip(y.iter()).fold(0u8, |acc, (p, q)| acc | (p ^ q)) == 0
 }
 
 fn token_hash(token: &str) -> String {
@@ -212,10 +193,7 @@ impl FromRequestParts<Arc<App>> for User {
         .bind(&id)
         .fetch_optional(&app.db)
         .await
-        .map_err(|e| {
-            tracing::error!("session lookup failed: {e}");
-            problem(StatusCode::SERVICE_UNAVAILABLE, "Database unavailable", "Try again in a moment.")
-        })?
+        .map_err(|e| problem(StatusCode::SERVICE_UNAVAILABLE, "Database unavailable", &e.to_string()))?
         .ok_or_else(unauthorized)?;
 
         let now = utc_now();
@@ -262,7 +240,6 @@ pub async fn state(State(a): S) -> Response {
         Ok(n) => Json(json!({
             "setup_required": n == 0,
             "setup_token_required": a.boot.setup_token.is_some(),
-            "sso": crate::sso::login_options(&a),
             "settings": a.settings.public_json(),
         }))
         .into_response(),
@@ -270,7 +247,7 @@ pub async fn state(State(a): S) -> Response {
     }
 }
 
-pub async fn start_session(a: &App, headers: &HeaderMap, user_id: i64, ip: &str) -> Result<String, Response> {
+async fn start_session(a: &App, headers: &HeaderMap, user_id: i64, ip: &str) -> Result<String, Response> {
     let mut raw = [0u8; 32];
     rand::rngs::OsRng.fill_bytes(&mut raw);
     let token = hex::encode(raw);
@@ -295,10 +272,10 @@ pub struct SetupBody {
 pub async fn setup(State(a): S, ConnectInfo(peer): ConnectInfo<SocketAddr>, headers: HeaderMap, Json(b): Json<SetupBody>) -> Response {
     let ip = client_ip(&a, &headers, Some(peer));
     if let Some(expected) = &a.boot.setup_token
-        && !b.token.as_deref().is_some_and(|t| constant_eq(t, expected))
+        && b.token.as_deref() != Some(expected.as_str())
     {
         db::audit(&a.db, "-", &ip, "auth.setup", "admin", "failure", "warning", "bad setup token");
-        return problem(StatusCode::FORBIDDEN, "Wrong setup token", "The setup token does not match SS_SETUP_TOKEN.");
+        return problem(StatusCode::FORBIDDEN, "Wrong setup token", "The setup token does not match VP_SETUP_TOKEN.");
     }
     if let Err(r) = check_password_policy(&a, &b.password) {
         return r;
@@ -323,7 +300,7 @@ pub async fn setup(State(a): S, ConnectInfo(peer): ConnectInfo<SocketAddr>, head
 /// Creates the admin only if no user exists yet, under a lock so two requests can't both win.
 async fn create_first_admin(a: &App, username: &str, hash: &str) -> Result<Option<i64>, Response> {
     let mut conn = a.db.acquire().await.map_err(db_error)?;
-    sqlx::query("SELECT GET_LOCK('ss_setup', 10)").execute(&mut *conn).await.map_err(db_error)?;
+    sqlx::query("SELECT GET_LOCK('vp_setup', 10)").execute(&mut *conn).await.map_err(db_error)?;
     let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users").fetch_one(&mut *conn).await.map_err(db_error)?;
     let result = if count > 0 {
         None
@@ -335,39 +312,20 @@ async fn create_first_admin(a: &App, username: &str, hash: &str) -> Result<Optio
             .execute(&mut *conn).await.map_err(db_error)?;
         Some(res.last_insert_id() as i64)
     };
-    sqlx::query("SELECT RELEASE_LOCK('ss_setup')").execute(&mut *conn).await.map_err(db_error)?;
+    sqlx::query("SELECT RELEASE_LOCK('vp_setup')").execute(&mut *conn).await.map_err(db_error)?;
     Ok(result)
 }
 
-/// With SS_ADMIN_PASSWORD set, the admin is created at startup and the setup screen is skipped.
+/// With VP_ADMIN_PASSWORD set, the admin is created at startup and the setup screen is skipped.
 pub async fn bootstrap_admin(a: &App) -> Result<(), String> {
     let Some(password) = a.boot.admin_password.clone() else { return Ok(()) };
     let hash = hash_password(&password)?;
     match create_first_admin(a, &a.boot.admin_username, &hash).await {
-        Ok(Some(_)) => tracing::info!("created admin account {} from SS_ADMIN_PASSWORD", a.boot.admin_username),
+        Ok(Some(_)) => tracing::info!("created admin account {} from VP_ADMIN_PASSWORD", a.boot.admin_username),
         Ok(None) => {}
         Err(_) => return Err("could not create the admin account".into()),
     }
     Ok(())
-}
-
-/// Failed sign-ins per client address in the current window. Account lockout stops guessing one
-/// password; this stops one address from trying many accounts.
-static FAILURES: std::sync::Mutex<Option<std::collections::HashMap<String, (u32, std::time::Instant)>>> = std::sync::Mutex::new(None);
-const FAILURE_WINDOW: std::time::Duration = std::time::Duration::from_secs(600);
-const FAILURES_PER_ADDRESS: u32 = 30;
-
-fn too_many_failures(ip: &str) -> bool {
-    let mut guard = FAILURES.lock().unwrap();
-    let map = guard.get_or_insert_with(Default::default);
-    map.retain(|_, (_, since)| since.elapsed() < FAILURE_WINDOW);
-    map.get(ip).is_some_and(|(n, _)| *n >= FAILURES_PER_ADDRESS)
-}
-
-fn record_failure(ip: &str) {
-    let mut guard = FAILURES.lock().unwrap();
-    let entry = guard.get_or_insert_with(Default::default).entry(ip.to_string()).or_insert((0, std::time::Instant::now()));
-    entry.0 += 1;
 }
 
 #[derive(Deserialize)]
@@ -378,18 +336,8 @@ pub struct LoginBody {
 
 pub async fn login(State(a): S, ConnectInfo(peer): ConnectInfo<SocketAddr>, headers: HeaderMap, Json(b): Json<LoginBody>) -> Response {
     let ip = client_ip(&a, &headers, Some(peer));
-    if too_many_failures(&ip) {
-        db::audit(&a.db, b.username.trim(), &ip, "auth.login", "session", "failure", "warning", "too many failures from this address");
-        return problem(StatusCode::TOO_MANY_REQUESTS, "Too many attempts", "Too many failed sign-ins from this address. Try again in a few minutes.");
-    }
-    let bad = || {
-        record_failure(&ip);
-        problem(StatusCode::UNAUTHORIZED, "Sign-in failed", "Wrong username or password.")
-    };
-    let row = match sqlx::query(
-        "SELECT u.id, u.password_hash, u.auth_source, u.status, u.failed_attempts, u.locked_until, u.grants, u.denies, r.permissions, r.locked
-         FROM users u JOIN roles r ON r.id = u.role_id WHERE u.username = ?",
-    ).bind(b.username.trim()).fetch_optional(&a.db).await {
+    let bad = || problem(StatusCode::UNAUTHORIZED, "Sign-in failed", "Wrong username or password.");
+    let row = match sqlx::query("SELECT id, password_hash, status, failed_attempts, locked_until FROM users WHERE username = ?").bind(b.username.trim()).fetch_optional(&a.db).await {
         Ok(r) => r,
         Err(e) => return db_error(e),
     };
@@ -415,15 +363,6 @@ pub async fn login(State(a): S, ConnectInfo(peer): ConnectInfo<SocketAddr>, head
         db::audit(&a.db, b.username.trim(), &ip, "auth.login", "session", "failure", "warning", "wrong password");
         return bad();
     }
-    // With single sign-on in charge, a password only still works for those who can manage users,
-    // as a way in when the provider is down.
-    if crate::sso::enabled(&a) && !a.settings.bool("sso_allow_password") {
-        let perms = effective(&parse_list(&row.get::<String, _>("permissions")), row.get::<i8, _>("locked") != 0, &parse_list(&row.get::<String, _>("grants")), &parse_list(&row.get::<String, _>("denies")));
-        if !perms.contains("users_manage") {
-            db::audit(&a.db, b.username.trim(), &ip, "auth.login", "session", "failure", "warning", "password sign-in is off");
-            return problem(StatusCode::FORBIDDEN, "Use single sign-on", "Sign in with the single sign-on button.");
-        }
-    }
     db::audit(&a.db, b.username.trim(), &ip, "auth.login", "session", "success", "info", "");
     match start_session(&a, &headers, id, &ip).await {
         Ok(cookie) => ([(header::SET_COOKIE, cookie)], Json(json!({"ok": true}))).into_response(),
@@ -446,9 +385,6 @@ pub async fn me(State(a): S, user: User) -> Json<Value> {
 }
 
 pub async fn put_prefs(State(a): S, user: User, Json(prefs): Json<Value>) -> Response {
-    if !prefs.is_object() || prefs.to_string().len() > 16_384 {
-        return problem(StatusCode::BAD_REQUEST, "Invalid preferences", "Preferences must be a JSON object under 16 KB.");
-    }
     match sqlx::query("UPDATE users SET prefs = ? WHERE id = ?").bind(prefs.to_string()).bind(user.id).execute(&a.db).await {
         Ok(_) => Json(prefs).into_response(),
         Err(e) => db_error(e),
@@ -466,9 +402,6 @@ pub async fn change_password(State(a): S, user: User, Json(b): Json<ChangePasswo
         Ok(h) => h,
         Err(e) => return db_error(e),
     };
-    if hash == "!" {
-        return problem(StatusCode::CONFLICT, "Signed in with single sign-on", "This account has no password here. Change it with your sign-in provider.");
-    }
     if !verify_password(&b.current, &hash) {
         return problem(StatusCode::BAD_REQUEST, "Wrong password", "The current password is not correct.");
     }
@@ -524,30 +457,6 @@ pub struct RoleBody {
     permissions: Vec<String>,
 }
 
-/// Nobody can hand out a permission they don't hold themselves, so managing users or roles
-/// can't be turned into more access than the manager already has.
-fn within_own(user: &User, list: &[String]) -> Result<(), Response> {
-    match list.iter().find(|p| !user.can(p)) {
-        Some(p) => Err(problem(StatusCode::FORBIDDEN, "Not allowed", &format!("You can't grant \"{p}\" because your own account doesn't have it."))),
-        None => Ok(()),
-    }
-}
-
-/// The permissions a role gives, for checking an assignment against the assigner's own.
-async fn role_permissions(a: &App, role_id: i64) -> Result<Vec<String>, Response> {
-    let row = sqlx::query("SELECT permissions, locked FROM roles WHERE id = ?").bind(role_id).fetch_optional(&a.db).await.map_err(db_error)?;
-    let row = row.ok_or_else(|| problem(StatusCode::BAD_REQUEST, "Unknown role", "Pick one of the existing roles."))?;
-    Ok(if row.get::<i8, _>("locked") != 0 { all_permissions() } else { parse_list(&row.get::<String, _>("permissions")) })
-}
-
-fn clean_name(name: &str, what: &str) -> Result<String, Response> {
-    let name = name.trim();
-    if name.is_empty() || name.chars().count() > 64 || name.chars().any(char::is_control) {
-        return Err(problem(StatusCode::BAD_REQUEST, "Invalid name", &format!("Give the {what} a name of 1 to 64 characters.")));
-    }
-    Ok(name.to_string())
-}
-
 fn known_perms(list: &[String]) -> Result<(), Response> {
     let known = all_permissions();
     match list.iter().find(|p| !known.contains(p)) {
@@ -557,16 +466,15 @@ fn known_perms(list: &[String]) -> Result<(), Response> {
 }
 
 pub async fn create_role(State(a): S, user: User, Json(b): Json<RoleBody>) -> Response {
-    if let Err(r) = user.need("roles_manage").and_then(|_| known_perms(&b.permissions)).and_then(|_| within_own(&user, &b.permissions)) {
+    if let Err(r) = user.need("roles_manage").and_then(|_| known_perms(&b.permissions)) {
         return r;
     }
-    let name = match clean_name(&b.name, "role") {
-        Ok(n) => n,
-        Err(r) => return r,
-    };
-    let name = name.as_str();
+    let name = b.name.trim();
+    if name.is_empty() {
+        return problem(StatusCode::BAD_REQUEST, "Name required", "Give the role a name.");
+    }
     let res = sqlx::query("INSERT INTO roles (name, description, permissions, created_at, updated_at) VALUES (?, ?, ?, ?, ?)")
-        .bind(name).bind(b.description.trim()).bind(json!(b.permissions).to_string()).bind(utc_now()).bind(utc_now()).execute(&a.db).await;
+        .bind(name).bind(&b.description).bind(json!(b.permissions).to_string()).bind(utc_now()).bind(utc_now()).execute(&a.db).await;
     match res {
         Ok(r) => {
             db::audit(&a.db, &user.username, &user.ip, "role.create", name, "success", "notice", &b.permissions.join(","));
@@ -585,45 +493,19 @@ pub async fn update_role(State(a): S, user: User, Path(id): Path<i64>, Json(b): 
     if let Err(r) = user.need("roles_manage").and_then(|_| known_perms(&b.permissions)) {
         return r;
     }
-    let name = match clean_name(&b.name, "role") {
-        Ok(n) => n,
-        Err(r) => return r,
-    };
     let locked: Option<i8> = match sqlx::query_scalar("SELECT locked FROM roles WHERE id = ?").bind(id).fetch_optional(&a.db).await {
         Ok(v) => v,
         Err(e) => return db_error(e),
     };
     match locked {
         None => return problem(StatusCode::NOT_FOUND, "Not found", "No such role."),
-        Some(1) => return problem(StatusCode::FORBIDDEN, "Role is locked", "The Administrator role always has every permission, so nobody can lock themselves out."),
+        Some(1) => return problem(StatusCode::FORBIDDEN, "Role is locked", "The Admin role always has every permission, so nobody can lock themselves out."),
         _ => {}
     }
-    // Taking away permissions is always allowed; a manager just can't add ones they lack.
-    let before = match role_permissions(&a, id).await {
-        Ok(p) => p,
-        Err(r) => return r,
-    };
-    let added: Vec<String> = b.permissions.iter().filter(|p| !before.contains(p)).cloned().collect();
-    if let Err(r) = within_own(&user, &added) {
-        return r;
-    }
-    let mut tx = match a.db.begin().await {
-        Ok(t) => t,
-        Err(e) => return db_error(e),
-    };
-    let result = sqlx::query("UPDATE roles SET name = ?, description = ?, permissions = ?, updated_at = ? WHERE id = ?")
-        .bind(&name).bind(b.description.trim()).bind(json!(b.permissions).to_string()).bind(utc_now()).bind(id).execute(&mut *tx).await;
-    if let Err(e) = result {
-        return if is_duplicate(&e) { problem(StatusCode::CONFLICT, "Name in use", "A role with this name already exists.") } else { db_error(e) };
-    }
-    match has_manager(&mut tx).await {
-        Ok(true) => {}
-        Ok(false) => return problem(StatusCode::CONFLICT, "Last administrator", "This would leave nobody able to manage users, so nothing was changed."),
-        Err(e) => return db_error(e),
-    }
-    match tx.commit().await {
+    match sqlx::query("UPDATE roles SET name = ?, description = ?, permissions = ?, updated_at = ? WHERE id = ?")
+        .bind(b.name.trim()).bind(&b.description).bind(json!(b.permissions).to_string()).bind(utc_now()).bind(id).execute(&a.db).await {
         Ok(_) => {
-            db::audit(&a.db, &user.username, &user.ip, "role.update", &name, "success", "notice", &b.permissions.join(","));
+            db::audit(&a.db, &user.username, &user.ip, "role.update", b.name.trim(), "success", "notice", &b.permissions.join(","));
             Json(json!({"ok": true})).into_response()
         }
         Err(e) if is_duplicate(&e) => problem(StatusCode::CONFLICT, "Name in use", "A role with this name already exists."),
@@ -665,7 +547,6 @@ fn user_json(r: &sqlx::mysql::MySqlRow) -> Value {
         "email": r.get::<String, _>("email"), "role_id": r.get::<i64, _>("role_id"), "role": r.get::<String, _>("role_name"),
         "status": r.get::<String, _>("status"), "grants": parse_list(&r.get::<String, _>("grants")), "denies": parse_list(&r.get::<String, _>("denies")),
         "last_login": last.map(iso), "locked": locked.is_some_and(|t| t > utc_now()),
-        "sso": r.get::<String, _>("auth_source") == "sso", "linked": r.get::<Option<String>, _>("external_id").is_some(),
     })
 }
 
@@ -695,52 +576,10 @@ pub struct UserBody {
     grants: Vec<String>,
     #[serde(default)]
     denies: Vec<String>,
-    /// Signs in with single sign-on only, and has no password here.
-    #[serde(default)]
-    sso: bool,
 }
 
 fn active() -> String {
     "active".into()
-}
-
-impl UserBody {
-    fn check(&self) -> Result<String, Response> {
-        known_perms(&self.grants)?;
-        known_perms(&self.denies)?;
-        if !matches!(self.status.as_str(), "active" | "disabled") {
-            return Err(problem(StatusCode::BAD_REQUEST, "Invalid status", "Status must be active or disabled."));
-        }
-        if self.email.len() > 190 || self.display_name.chars().count() > 128 {
-            return Err(problem(StatusCode::BAD_REQUEST, "Too long", "Display name or email is too long."));
-        }
-        let username = self.username.trim();
-        if username.is_empty() || username.chars().count() > 96 || username.chars().any(|c| c.is_control() || c.is_whitespace()) {
-            return Err(problem(StatusCode::BAD_REQUEST, "Invalid username", "Use 1 to 96 characters without spaces."));
-        }
-        Ok(username.to_string())
-    }
-}
-
-/// What the account would be able to do, for comparing with the person changing it.
-async fn assigned_permissions(a: &App, role_id: i64, grants: &[String]) -> Result<Vec<String>, Response> {
-    let mut perms = role_permissions(a, role_id).await?;
-    perms.extend(grants.iter().cloned());
-    Ok(perms)
-}
-
-/// A user manager may only change accounts that have no more access than they have, so a
-/// partial administrator can't reset the password of a full one and sign in as them.
-async fn target_within(a: &App, user: &User, id: i64) -> Result<(), Response> {
-    let row = sqlx::query("SELECT u.grants, u.denies, r.permissions, r.locked FROM users u JOIN roles r ON r.id = u.role_id WHERE u.id = ?")
-        .bind(id).fetch_optional(&a.db).await.map_err(db_error)?
-        .ok_or_else(|| problem(StatusCode::NOT_FOUND, "Not found", "No such user."))?;
-    let theirs = effective(&parse_list(&row.get::<String, _>("permissions")), row.get::<i8, _>("locked") != 0, &parse_list(&row.get::<String, _>("grants")), &parse_list(&row.get::<String, _>("denies")));
-    if theirs.iter().all(|p| user.can(p)) {
-        Ok(())
-    } else {
-        Err(problem(StatusCode::FORBIDDEN, "Not allowed", "This account has permissions that yours doesn't, so only someone with at least the same access can change it."))
-    }
 }
 
 /// True when at least one active account can manage users. Run inside the transaction making a
@@ -753,31 +592,26 @@ async fn has_manager(tx: &mut sqlx::MySqlConnection) -> Result<bool, sqlx::Error
 }
 
 pub async fn create_user(State(a): S, user: User, Json(b): Json<UserBody>) -> Response {
-    let username = match user.need("users_manage").and_then(|_| b.check()) {
-        Ok(u) => u,
-        Err(r) => return r,
-    };
-    if let Err(r) = async { within_own(&user, &assigned_permissions(&a, b.role_id, &b.grants).await?) }.await {
+    if let Err(r) = user.need("users_manage").and_then(|_| known_perms(&b.grants)).and_then(|_| known_perms(&b.denies)) {
         return r;
     }
-    let username = username.as_str();
-    let hash = if b.sso {
-        "!".to_string()
-    } else {
-        let Some(password) = b.password.as_deref().filter(|p| !p.is_empty()) else {
-            return problem(StatusCode::BAD_REQUEST, "Password required", "Set a password for the new user.");
-        };
-        if let Err(r) = check_password_policy(&a, password) {
-            return r;
-        }
-        match hash_password(password) {
-            Ok(h) => h,
-            Err(e) => return problem(StatusCode::INTERNAL_SERVER_ERROR, "Could not hash password", &e),
-        }
+    let Some(password) = b.password.as_deref().filter(|p| !p.is_empty()) else {
+        return problem(StatusCode::BAD_REQUEST, "Password required", "Set a password for the new user.");
+    };
+    if let Err(r) = check_password_policy(&a, password) {
+        return r;
+    }
+    let username = b.username.trim();
+    if username.is_empty() {
+        return problem(StatusCode::BAD_REQUEST, "Username required", "Enter a username.");
+    }
+    let hash = match hash_password(password) {
+        Ok(h) => h,
+        Err(e) => return problem(StatusCode::INTERNAL_SERVER_ERROR, "Could not hash password", &e),
     };
     let now = utc_now();
-    let res = sqlx::query("INSERT INTO users (username, display_name, email, password_hash, auth_source, role_id, status, grants, denies, prefs, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '{}', ?, ?)")
-        .bind(username).bind(b.display_name.trim()).bind(b.email.trim()).bind(hash).bind(if b.sso { "sso" } else { "local" }).bind(b.role_id).bind(&b.status)
+    let res = sqlx::query("INSERT INTO users (username, display_name, email, password_hash, role_id, status, grants, denies, prefs, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, '{}', ?, ?)")
+        .bind(username).bind(&b.display_name).bind(&b.email).bind(hash).bind(b.role_id).bind(&b.status)
         .bind(json!(b.grants).to_string()).bind(json!(b.denies).to_string()).bind(now).bind(now)
         .execute(&a.db).await;
     match res {
@@ -791,16 +625,7 @@ pub async fn create_user(State(a): S, user: User, Json(b): Json<UserBody>) -> Re
 }
 
 pub async fn update_user(State(a): S, user: User, Path(id): Path<i64>, Json(b): Json<UserBody>) -> Response {
-    let username = match user.need("users_manage").and_then(|_| b.check()) {
-        Ok(u) => u,
-        Err(r) => return r,
-    };
-    if let Err(r) = async {
-        target_within(&a, &user, id).await?;
-        within_own(&user, &assigned_permissions(&a, b.role_id, &b.grants).await?)
-    }
-    .await
-    {
+    if let Err(r) = user.need("users_manage").and_then(|_| known_perms(&b.grants)).and_then(|_| known_perms(&b.denies)) {
         return r;
     }
     let mut tx = match a.db.begin().await {
@@ -808,7 +633,7 @@ pub async fn update_user(State(a): S, user: User, Path(id): Path<i64>, Json(b): 
         Err(e) => return db_error(e),
     };
     let result = sqlx::query("UPDATE users SET username = ?, display_name = ?, email = ?, role_id = ?, status = ?, grants = ?, denies = ?, updated_at = ? WHERE id = ?")
-        .bind(&username).bind(b.display_name.trim()).bind(b.email.trim()).bind(b.role_id).bind(&b.status)
+        .bind(b.username.trim()).bind(&b.display_name).bind(&b.email).bind(b.role_id).bind(&b.status)
         .bind(json!(b.grants).to_string()).bind(json!(b.denies).to_string()).bind(utc_now()).bind(id)
         .execute(&mut *tx).await;
     if let Err(e) = result {
@@ -825,7 +650,7 @@ pub async fn update_user(State(a): S, user: User, Path(id): Path<i64>, Json(b): 
     if b.status != "active" {
         let _ = sqlx::query("DELETE FROM sessions WHERE user_id = ?").bind(id).execute(&a.db).await;
     }
-    db::audit(&a.db, &user.username, &user.ip, "user.update", &username, "success", "notice", &format!("role_id={} status={} grants={} denies={}", b.role_id, b.status, b.grants.join(","), b.denies.join(",")));
+    db::audit(&a.db, &user.username, &user.ip, "user.update", b.username.trim(), "success", "notice", &format!("role_id={} status={} grants={} denies={}", b.role_id, b.status, b.grants.join(","), b.denies.join(",")));
     Json(json!({"ok": true})).into_response()
 }
 
@@ -837,14 +662,6 @@ pub struct ResetBody {
 pub async fn reset_password(State(a): S, user: User, Path(id): Path<i64>, Json(b): Json<ResetBody>) -> Response {
     if let Err(r) = user.need("users_manage").and_then(|_| check_password_policy(&a, &b.password)) {
         return r;
-    }
-    if let Err(r) = target_within(&a, &user, id).await {
-        return r;
-    }
-    match sqlx::query_scalar::<_, String>("SELECT auth_source FROM users WHERE id = ?").bind(id).fetch_optional(&a.db).await {
-        Ok(Some(source)) if source == "sso" => return problem(StatusCode::CONFLICT, "Single sign-on account", "This account signs in with single sign-on and has no password here."),
-        Ok(_) => {}
-        Err(e) => return db_error(e),
     }
     let hash = match hash_password(&b.password) {
         Ok(h) => h,
@@ -864,9 +681,6 @@ pub async fn delete_user(State(a): S, user: User, Path(id): Path<i64>) -> Respon
     }
     if id == user.id {
         return problem(StatusCode::CONFLICT, "Can't delete yourself", "Ask another administrator to remove this account.");
-    }
-    if let Err(r) = target_within(&a, &user, id).await {
-        return r;
     }
     let name: Option<String> = sqlx::query_scalar("SELECT username FROM users WHERE id = ?").bind(id).fetch_optional(&a.db).await.ok().flatten();
     let _ = sqlx::query("DELETE FROM saved_searches WHERE owner_id = ?").bind(id).execute(&a.db).await;
@@ -903,27 +717,19 @@ pub async fn put_setting(State(a): S, user: User, Path(key): Path<String>, Json(
     if a.settings.locked(&key) {
         return problem(StatusCode::CONFLICT, "Set by environment", &format!("{} is set in the environment, which takes priority.", config::env_name(&key)));
     }
-    let mut stored_value = None;
     let result = match &b.value {
         Some(value) => {
             if let Err(e) = config::validate(def, value) {
                 return problem(StatusCode::BAD_REQUEST, "Invalid value", &format!("{} {e}", def.label));
             }
-            let stored = if def.secret && !value.trim().is_empty() { crate::storage::seal(&a, value.trim()) } else { value.trim().to_string() };
-            stored_value = Some(stored.clone());
-            sqlx::query("REPLACE INTO settings (skey, value, updated_by, updated_at) VALUES (?, ?, ?, ?)").bind(&key).bind(stored).bind(&user.username).bind(utc_now()).execute(&a.db).await
+            sqlx::query("REPLACE INTO settings (skey, value, updated_by, updated_at) VALUES (?, ?, ?, ?)").bind(&key).bind(value.trim()).bind(&user.username).bind(utc_now()).execute(&a.db).await
         }
         None => sqlx::query("DELETE FROM settings WHERE skey = ?").bind(&key).execute(&a.db).await,
     };
     if let Err(e) = result {
         return db_error(e);
     }
-    a.settings.set_db(&key, stored_value.as_deref());
-    let shown = match &b.value {
-        None => "(reset to default)",
-        Some(_) if def.secret => "(secret changed)",
-        Some(v) => v.as_str(),
-    };
-    db::audit(&a.db, &user.username, &user.ip, "settings.update", &key, "success", "notice", shown);
+    a.settings.set_db(&key, b.value.as_deref().map(str::trim));
+    db::audit(&a.db, &user.username, &user.ip, "settings.update", &key, "success", "notice", b.value.as_deref().unwrap_or("(reset to default)"));
     Json(json!({"ok": true})).into_response()
 }

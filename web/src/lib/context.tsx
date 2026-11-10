@@ -26,6 +26,7 @@ export interface UserPrefs {
 export interface AppSettings {
   app_name: string;
   accent_color: string;
+  default_theme: string;
   login_message: string;
   banner_text: string;
   default_tz: string;
@@ -90,7 +91,7 @@ export function applyTheme(theme: "light" | "dark", accent?: string) {
     root.style.removeProperty("--on-accent");
   }
   try {
-    localStorage.setItem("ss-theme", theme);
+    localStorage.setItem("vp-theme", theme);
   } catch {
     // Only used to avoid a color flash on the next load.
   }
@@ -100,7 +101,7 @@ export function PrefsProvider({ me, children }: { me: Me; children: ReactNode })
   const [prefs, setPrefs] = useState<UserPrefs>(me.prefs ?? {});
   const settings = me.settings;
   const [refreshMs, setRefreshMs] = useState<number | false>(settings.default_refresh_seconds ? settings.default_refresh_seconds * 1000 : false);
-  const theme = resolveTheme(prefs.theme);
+  const theme = resolveTheme(prefs.theme ?? settings.default_theme);
   const perms = useMemo(() => new Set(me.permissions), [me.permissions]);
 
   useEffect(() => applyTheme(theme, settings.accent_color), [theme, settings.accent_color]);

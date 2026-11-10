@@ -374,7 +374,7 @@ function axisValue(v: number, unit: string): string {
   return compact(v);
 }
 
-export function escapeHtml(s: string) {
+function escapeHtml(s: string) {
   return s.replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[ch]!);
 }
 
@@ -464,7 +464,7 @@ export function HeatChart({ data, height, onClick }: { data: any; height: number
       tooltip: {
         confine: true,
         ...tooltipChrome(c),
-        formatter: (p: any) => `${fmtMonthDay(data.buckets[p.value[0]], tz)} ${fmtHM(data.buckets[p.value[0]], tz)}<br/>Status <b>${escapeHtml(String(data.keys[p.value[1]]))}</b>: <b>${p.value[2]}</b> calls`,
+        formatter: (p: any) => `${fmtMonthDay(data.buckets[p.value[0]], tz)} ${fmtHM(data.buckets[p.value[0]], tz)}<br/>Status <b>${data.keys[p.value[1]]}</b>: <b>${p.value[2]}</b> calls`,
       },
       series: [{ type: "heatmap", data: data.cells, itemStyle: { borderColor: c.surface, borderWidth: 1 }, emphasis: { disabled: true } }],
     };
@@ -530,7 +530,7 @@ export function HistogramStrip({ histogram, height = 70, onZoom }: { histogram: 
         trigger: "axis",
         confine: true,
         ...tooltipChrome(c),
-        formatter: (p: any[]) => `${fmtHMS(histogram.buckets[p[0].dataIndex], tz)}<br/>${p.filter((x) => x.value).map((x) => `${escapeHtml(String(x.seriesName))}: <b>${x.value}</b>`).join("<br/>") || "No calls"}`,
+        formatter: (p: any[]) => `${fmtHMS(histogram.buckets[p[0].dataIndex], tz)}<br/>${p.filter((x) => x.value).map((x) => `${x.seriesName}: <b>${x.value}</b>`).join("<br/>") || "No calls"}`,
       },
       series: histogram.series.map((s: any) => ({ name: s.name, type: "bar", stack: "t", barMaxWidth: 24, itemStyle: { color: colors[s.name] }, data: s.values, emphasis: { disabled: true } })),
     };
