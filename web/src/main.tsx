@@ -80,14 +80,14 @@ function Gate() {
 
   useEffect(() => {
     const signedOut = () => client.invalidateQueries({ queryKey: ["me"] });
-    window.addEventListener("vp-signed-out", signedOut);
-    return () => window.removeEventListener("vp-signed-out", signedOut);
+    window.addEventListener("ss-signed-out", signedOut);
+    return () => window.removeEventListener("ss-signed-out", signedOut);
   }, [client]);
 
   if (state.error) return <div className="p-6 text-crit">Can't reach the server: {(state.error as Error).message}</div>;
   if (!state.data) return <Loading />;
   if (state.data.setup_required) return <SetupPage settings={state.data.settings} tokenRequired={state.data.setup_token_required} />;
-  if (me.error && (me.error as ApiError).status === 401) return <LoginPage settings={state.data.settings} />;
+  if (me.error && (me.error as ApiError).status === 401) return <LoginPage settings={state.data.settings} sso={state.data.sso} />;
   if (me.error) return <div className="p-6 text-crit">{(me.error as Error).message}</div>;
   if (!me.data) return <Loading />;
   return (

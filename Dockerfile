@@ -24,7 +24,7 @@ LABEL org.opencontainers.image.title="sip-source" \
 COPY --from=core /src/target/release/vpd /usr/local/bin/vpd
 COPY --from=engine /clickhouse /usr/local/bin/clickhouse
 COPY --from=engine --chown=65532:65532 /data /data
-ENV VP_LISTEN=0.0.0.0:8080 VP_DATA_DIR=/data
+ENV SS_LISTEN=0.0.0.0:8080 SS_DATA_DIR=/data
 EXPOSE 8080 9060/udp 9060/tcp
 HEALTHCHECK --interval=15s --timeout=5s --start-period=60s --retries=4 CMD ["/usr/local/bin/vpd", "healthcheck"]
 ENTRYPOINT ["/usr/local/bin/vpd"]
