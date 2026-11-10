@@ -71,22 +71,6 @@
       "options": {}
     },
     {
-      "id": 4,
-      "type": "stat",
-      "title": "One-way audio",
-      "gridPos": {
-        "x": 18,
-        "y": 0,
-        "w": 6,
-        "h": 3
-      },
-      "query": {
-        "mode": "metric",
-        "metric": "one_way"
-      },
-      "options": {}
-    },
-    {
       "id": 5,
       "type": "timeseries",
       "title": "MOS p5 by media node",
@@ -146,25 +130,6 @@
       "options": {
         "limit": 8,
         "order": "asc"
-      }
-    },
-    {
-      "id": 8,
-      "type": "top",
-      "title": "One-way audio by media node",
-      "gridPos": {
-        "x": 8,
-        "y": 12,
-        "w": 8,
-        "h": 9
-      },
-      "query": {
-        "mode": "metric",
-        "metric": "one_way",
-        "groupBy": "media_node"
-      },
-      "options": {
-        "limit": 6
       }
     },
     {

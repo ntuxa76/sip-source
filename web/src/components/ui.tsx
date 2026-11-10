@@ -80,8 +80,6 @@ export function SeverityBadge({ severity, children }: { severity: string; childr
 const FINDING_SEVERITY: Record<string, string> = {
   NO_FINAL_RESPONSE: "critical",
   ACK_MISSING: "critical",
-  ONE_WAY_AUDIO: "critical",
-  NO_MEDIA: "critical",
   DROP_AFTER_32S: "warning",
   AUTH_LOOP: "warning",
   NO_COMMON_CODEC: "warning",

@@ -312,11 +312,12 @@ fn handle_rtcp(ing: &Ingest, h: &Hep, ts: i64, node: &str) {
     let packets = v["sender_information"]["packets"].as_u64().unwrap_or(0);
     let lost = block.and_then(|b| b["packets_lost"].as_i64()).unwrap_or(0);
     let reported = v["mos"].as_f64().or(v["MOS"].as_f64()).filter(|m| *m > 0.0);
-    let mos = reported.unwrap_or_else(|| estimate_mos(loss_pct, jitter_ms, rtt_ms.unwrap_or(0.0)));
+    // A sender report with no report block says nothing about received quality.
+    let mos = reported.or_else(|| block.map(|_| estimate_mos(loss_pct, jitter_ms, rtt_ms.unwrap_or(0.0))));
     let row = json!({
         "ts": ch_time(ts), "call_id": call_id, "capture_id": h.capture_id, "capture_point": node, "source": "rtcp",
         "ssrc": v["ssrc"].to_string().trim_matches('"'), "src_ip": h.src_ip, "dst_ip": h.dst_ip, "packets": packets, "lost": lost,
-        "loss_pct": loss_pct, "jitter_ms": jitter_ms, "rtt_ms": rtt_ms, "mos": mos, "mos_estimated": reported.is_none(),
+        "loss_pct": loss_pct, "jitter_ms": jitter_ms, "rtt_ms": rtt_ms, "mos": mos, "mos_estimated": reported.is_none() && mos.is_some(),
     });
     ing.send(Row_::Qos(row.to_string()));
     ing.dirty.lock().unwrap().insert(call_id, now_us());

@@ -82,8 +82,6 @@ const DIM_TO_FIELD: Record<string, string> = {
 
 const METRIC_TO_FILTER: Record<string, string> = {
   failures: "status>=400",
-  one_way: "finding:ONE_WAY_AUDIO",
-  no_media: "finding:NO_MEDIA",
   scanner: "finding:SCANNER",
 };
 

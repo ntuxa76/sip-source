@@ -59,9 +59,7 @@ struct M {
     capture_id: u32,
     capture_point: String,
     src_ip: String,
-    src_port: u16,
     dst_ip: String,
-    dst_port: u16,
     is_request: bool,
     method: String,
     status: u16,
@@ -82,7 +80,7 @@ struct M {
     hep_cid: String,
 }
 
-const MSG_COLUMNS: &str = "toUnixTimestamp64Micro(ts) AS ts_us, capture_id, capture_point, src_ip, src_port, dst_ip, dst_port, call_id, is_request, method, status, reason, cseq_num, cseq_method, from_user, from_tag, to_tag, ruri_user, via_branch, user_agent, codecs, sdp_ip, sdp_dir, q850_cause, x_cid, hep_cid";
+const MSG_COLUMNS: &str = "toUnixTimestamp64Micro(ts) AS ts_us, capture_id, capture_point, src_ip, dst_ip, call_id, is_request, method, status, reason, cseq_num, cseq_method, from_user, from_tag, to_tag, ruri_user, via_branch, user_agent, codecs, sdp_ip, sdp_dir, q850_cause, x_cid, hep_cid";
 
 fn s(v: &Value, k: &str) -> String {
     v[k].as_str().unwrap_or("").to_string()
@@ -98,9 +96,7 @@ fn message(v: &Value) -> (String, M) {
         capture_id: v["capture_id"].as_u64().unwrap_or(0) as u32,
         capture_point: s(v, "capture_point"),
         src_ip: s(v, "src_ip"),
-        src_port: v["src_port"].as_u64().unwrap_or(0) as u16,
         dst_ip: s(v, "dst_ip"),
-        dst_port: v["dst_port"].as_u64().unwrap_or(0) as u16,
         is_request: truthy(&v["is_request"]),
         method: s(v, "method"),
         status: v["status"].as_u64().unwrap_or(0) as u16,
@@ -127,6 +123,8 @@ struct Dialog {
     id: String,
     msgs: Vec<M>,
     retrans: u32,
+    /// The latest copy of the INVITE: a slow PBX may only act on a retransmission.
+    last_invite: i64,
     response_retrans: HashMap<(u16, u32), u32>,
     capture_ids: BTreeSet<u32>,
     capture_points: BTreeSet<String>,
@@ -135,12 +133,16 @@ struct Dialog {
 
 impl Dialog {
     fn build(id: String, all: Vec<M>) -> Dialog {
-        let mut seen: HashMap<(String, u16, String, u16, String, u16, u32, String), u32> = HashMap::new();
-        let mut d = Dialog { id, msgs: Vec::new(), retrans: 0, response_retrans: HashMap::new(), capture_ids: BTreeSet::new(), capture_points: BTreeSet::new(), raw_count: all.len() as u32 };
+        let mut seen: HashMap<(String, u16, u32, String), u32> = HashMap::new();
+        let mut d = Dialog { id, msgs: Vec::new(), retrans: 0, last_invite: 0, response_retrans: HashMap::new(), capture_ids: BTreeSet::new(), capture_points: BTreeSet::new(), raw_count: all.len() as u32 };
         for m in all {
             d.capture_ids.insert(m.capture_id);
             d.capture_points.insert(m.capture_point.clone());
-            let key = (m.src_ip.clone(), m.src_port, m.dst_ip.clone(), m.dst_port, format!("{}{}", m.method, m.cseq_method), m.status, m.cseq, m.via_branch.clone());
+            if m.is_request && m.method == "INVITE" && m.to_tag.is_empty() {
+                d.last_invite = m.ts;
+            }
+            // The top Via branch identifies the message. Agents can disagree about its addresses.
+            let key = (format!("{}{}", m.method, m.cseq_method), m.status, m.cseq, m.via_branch.clone());
             match seen.get_mut(&key) {
                 Some(capture) if *capture != m.capture_id => {}
                 Some(_) => {
@@ -533,8 +535,8 @@ async fn process(app: &App, ch: &Ch, ids: Vec<String>, now: i64, pending: &mut H
                 continue;
             }
             // The closest earlier INVITE that arrived at the host this one was sent from.
-            let matched = starts[..i].iter().rev().take_while(|(ta, _, _)| tb - ta <= 3 * SEC).find(|(_, a, ia)| {
-                a.id != b.id && a.capture_ids.intersection(&b.capture_ids).next().is_some() && ia.dst_ip == ib.src_ip && !digits_tail(&ia.ruri_user).is_empty() && digits_tail(&ia.ruri_user) == digits_tail(&ib.ruri_user)
+            let matched = starts[..i].iter().rev().take_while(|(ta, _, _)| tb - ta <= 35 * SEC).find(|(_, a, ia)| {
+                a.id != b.id && tb - a.last_invite <= 3 * SEC && a.capture_ids.intersection(&b.capture_ids).next().is_some() && ia.dst_ip == ib.src_ip && !digits_tail(&ia.ruri_user).is_empty() && digits_tail(&ia.ruri_user) == digits_tail(&ib.ruri_user)
             });
             if let Some((_, a, _)) = matched {
                 union(&mut parent, &a.id, &b.id);
@@ -690,6 +692,15 @@ mod tests {
         second.capture_id = 2;
         let d = Dialog::build("x".into(), vec![m(0, true, "INVITE", 0, 1, "INVITE", ""), second]);
         assert_eq!((d.msgs.len(), d.retrans, d.capture_ids.len()), (1, 0, 2));
+    }
+
+    #[test]
+    fn agents_disagreeing_on_addresses_still_see_one_message() {
+        let mut second = m(5, true, "INVITE", 0, 1, "INVITE", "");
+        second.capture_id = 2;
+        second.dst_ip = "1.1.1.1".into();
+        let d = Dialog::build("x".into(), vec![m(0, true, "INVITE", 0, 1, "INVITE", ""), second]);
+        assert_eq!((d.msgs.len(), d.retrans), (1, 0));
     }
 
     #[test]

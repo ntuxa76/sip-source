@@ -98,28 +98,29 @@ pub const DEFS: &[Def] = &[
     d("retention_metrics_days", Int(1, 3650), "90", "Retention", "Capture metrics (days)", "Applied to ClickHouse at startup and when a storage is selected.", true, false),
 ];
 
-/// Process-level variables, which are read once at startup and aren't stored anywhere.
-pub const BOOT_VARS: &[(&str, &str, &str, bool)] = &[
-    ("VP_DB_HOST", "", "MariaDB host", true),
-    ("VP_DB_USER", "", "MariaDB user", true),
-    ("VP_DB_PASSWORD", "", "MariaDB password. VP_DB_PASSWORD_FILE reads it from a file (Docker secrets)", true),
-    ("VP_DB_NAME", "voip_panel", "Database name. It must already exist", false),
-    ("VP_DB_PORT", "3306", "MariaDB port", false),
-    ("VP_DB_URL", "", "Replaces all VP_DB_* above, e.g. mysql://user:pass@host:3306/voip_panel", false),
-    ("VP_DB_SSL_MODE", "preferred", "disabled, preferred, required, verify_ca or verify_identity", false),
-    ("VP_DB_MAX_CONNECTIONS", "10", "Connection pool size", false),
-    ("VP_DB_CONNECT_RETRIES", "60", "Attempts to reach MariaDB at startup", false),
-    ("VP_DB_CONNECT_RETRY_SECONDS", "2", "Wait between those attempts", false),
-    ("VP_LISTEN", "0.0.0.0:8080", "Address and port to serve on", false),
-    ("VP_HEP_UDP", "0.0.0.0:9060", "Address and port for HEP over UDP. Empty turns it off", false),
-    ("VP_HEP_TCP", "0.0.0.0:9060", "Address and port for HEP over TCP. Empty turns it off", false),
-    ("VP_ADMIN_USERNAME", "admin", "Name of the first administrator", false),
-    ("VP_ADMIN_PASSWORD", "", "Creates the administrator at startup and skips the first-run screen. VP_ADMIN_PASSWORD_FILE also works", false),
-    ("VP_SETUP_TOKEN", "", "If set, the first-run screen asks for this token. Use it when the port is reachable by others before setup", false),
-    ("VP_SECRET_KEY", "", "Encrypts storage passwords in MariaDB. Keep it stable: changing it makes saved passwords unreadable", false),
-    ("VP_TRUST_PROXY", "false", "Take the client address from X-Forwarded-For. Only behind a proxy you control", false),
-    ("VP_LOG_LEVEL", "info", "trace, debug, info, warn or error", false),
-    ("VP_LOG_FORMAT", "text", "text or json", false),
+/// Process-level variables, which are read once at startup and aren't stored anywhere:
+/// (name, default, description, required, group).
+pub const BOOT_VARS: &[(&str, &str, &str, bool, &str)] = &[
+    ("VP_DB_HOST", "", "MariaDB host name or IP", true, "Database"),
+    ("VP_DB_USER", "", "MariaDB user", true, "Database"),
+    ("VP_DB_PASSWORD", "", "MariaDB password. VP_DB_PASSWORD_FILE reads it from a file instead (Docker secrets)", true, "Database"),
+    ("VP_DB_NAME", "voip_panel", "Database name. It must already exist; the tables are created on first start", false, "Database"),
+    ("VP_DB_PORT", "3306", "MariaDB port", false, "Database"),
+    ("VP_DB_URL", "", "Replaces all VP_DB_* above, e.g. mysql://user:pass@host:3306/voip_panel. VP_DB_URL_FILE also works", false, "Database"),
+    ("VP_DB_SSL_MODE", "preferred", "disabled, preferred, required, verify_ca or verify_identity", false, "Database"),
+    ("VP_DB_MAX_CONNECTIONS", "10", "Connection pool size", false, "Database"),
+    ("VP_DB_CONNECT_RETRIES", "60", "Attempts to reach MariaDB at startup before giving up", false, "Database"),
+    ("VP_DB_CONNECT_RETRY_SECONDS", "2", "Wait between those attempts", false, "Database"),
+    ("VP_LISTEN", "0.0.0.0:8080", "Address and port for the web UI and API", false, "Network"),
+    ("VP_HEP_UDP", "0.0.0.0:9060", "Address and port for HEP over UDP. Empty turns it off", false, "Network"),
+    ("VP_HEP_TCP", "0.0.0.0:9060", "Address and port for HEP over TCP. Empty turns it off", false, "Network"),
+    ("VP_TRUST_PROXY", "false", "Take the client address from X-Forwarded-For. Only behind a proxy you control", false, "Network"),
+    ("VP_ADMIN_USERNAME", "admin", "Name of the first administrator", false, "First start and secrets"),
+    ("VP_ADMIN_PASSWORD", "", "Creates the administrator at startup and skips the first-run screen. VP_ADMIN_PASSWORD_FILE also works", false, "First start and secrets"),
+    ("VP_SETUP_TOKEN", "", "If set, the first-run screen asks for this token. Use it when the port is reachable by others before setup", false, "First start and secrets"),
+    ("VP_SECRET_KEY", "", "Encrypts the ClickHouse passwords saved from the Storage page. Keep it stable: changing it makes saved passwords unreadable", false, "First start and secrets"),
+    ("VP_LOG_LEVEL", "info", "trace, debug, info, warn or error", false, "Logging"),
+    ("VP_LOG_FORMAT", "text", "text or json", false, "Logging"),
 ];
 
 pub fn env_name(key: &str) -> String {

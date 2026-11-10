@@ -1,5 +1,10 @@
-# Set the passwords in a .env file next to this one (see .env.compose.example), then:
+# voip-panel with its own MariaDB. ClickHouse is your existing server: connect it
+# under Admin -> Storage after the first login.
+#
+#   cp .env.compose.example .env      # then set the passwords
 #   docker compose up -d
+#
+# Every VP_* variable is described in docs/ENVIRONMENT.md.
 services:
   mariadb:
     image: docker.io/library/mariadb:11.4
@@ -18,8 +23,7 @@ services:
       retries: 30
 
   voip-panel:
-    image: ghcr.io/noorotk/voip-panel:latest
-    build: .
+    image: ntuxa76/sip-source:0.1
     restart: unless-stopped
     depends_on:
       mariadb:
@@ -28,7 +32,11 @@ services:
       VP_DB_HOST: mariadb
       VP_DB_USER: voip_panel
       VP_DB_PASSWORD: ${VP_DB_PASSWORD}
-      # Any other VP_* variable can go here. `docs/ENVIRONMENT.md` lists them all.
+      VP_SECRET_KEY: ${VP_SECRET_KEY:-}
+      VP_SETUP_TOKEN: ${VP_SETUP_TOKEN:-}
+      # Add any other VP_* variable here, for example:
+      # VP_DEFAULT_TZ: Asia/Baghdad
+      # VP_HEP_AUTH_KEY: change-me
     ports:
       - "${VP_PORT:-8080}:8080"
       - "${VP_HEP_PORT:-9060}:9060/udp"

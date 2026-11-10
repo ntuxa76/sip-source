@@ -153,8 +153,7 @@ fn build(rows: &[Value], call: &Call) -> Flow {
         dst_ip: String,
     }
     let mut out: Vec<Pending> = Vec::new();
-    let mut hosts: Vec<String> = Vec::new();
-    let mut last_capture: HashMap<(String, String, u32, String, String), (usize, u32)> = HashMap::new();
+    let mut last_capture: HashMap<(String, u32, String, String), (usize, u32)> = HashMap::new();
     let mut capture_hosts: HashMap<u32, (String, Option<BTreeSet<String>>)> = HashMap::new();
 
     for r in rows {
@@ -167,26 +166,30 @@ fn build(rows: &[Value], call: &Call) -> Flow {
         let src_addr = format!("{src_ip}:{}", port(r, "src_port"));
         let dst_addr = format!("{dst_ip}:{}", port(r, "dst_port"));
 
-        // The agent's own host is the address present in everything it captured.
-        let here: BTreeSet<String> = [src_ip.clone(), dst_ip.clone()].into_iter().collect();
-        let entry = capture_hosts.entry(capture_id).or_insert_with(|| (point.clone(), None));
-        entry.1 = Some(match entry.1.take() {
-            None => here,
-            Some(set) => set.intersection(&here).cloned().collect(),
-        });
-
-        for ip in [&src_ip, &dst_ip] {
-            if !hosts.contains(ip) {
-                hosts.push(ip.clone());
-            }
+        // The agent's own host is the address present in everything it captured. A message from a
+        // host to itself means the agent couldn't tell which of its addresses was used.
+        if src_ip != dst_ip {
+            let here: BTreeSet<String> = [src_ip.clone(), dst_ip.clone()].into_iter().collect();
+            let entry = capture_hosts.entry(capture_id).or_insert_with(|| (point.clone(), None));
+            entry.1 = Some(match entry.1.take() {
+                None => here,
+                Some(set) => set.intersection(&here).cloned().collect(),
+            });
         }
 
+        // The top Via branch identifies the message, even when agents report different addresses.
         let code_or_method = if s.is_request { s.method.clone() } else { s.status.to_string() };
-        let key = (format!("{src_addr}>{dst_addr}"), code_or_method, s.cseq_num, s.cseq_method.clone(), text(r, "via_branch"));
+        let key = (code_or_method, s.cseq_num, s.cseq_method.clone(), text(r, "via_branch"));
         if let Some(&(i, seen_capture)) = last_capture.get(&key) {
             if seen_capture != capture_id && !out[i].msg.captures.iter().any(|c| c.capture_id == capture_id) {
                 // The same message seen at another capture point: one arrow with both timestamps.
                 out[i].msg.captures.push(Capture { point, capture_id, ts });
+                if out[i].src_ip == out[i].dst_ip {
+                    out[i].msg.src_addr = src_addr;
+                    out[i].msg.dst_addr = dst_addr;
+                    out[i].src_ip = src_ip;
+                    out[i].dst_ip = dst_ip;
+                }
                 continue;
             }
             if out[i].msg.captures.len() > 1 && seen_capture != capture_id {
@@ -239,6 +242,14 @@ fn build(rows: &[Value], call: &Call) -> Flow {
     }
 
     // Columns follow the path: order of first appearance in the signalling.
+    let mut hosts: Vec<String> = Vec::new();
+    for p in &out {
+        for ip in [&p.src_ip, &p.dst_ip] {
+            if !hosts.contains(ip) {
+                hosts.push(ip.clone());
+            }
+        }
+    }
     let mut named: HashMap<String, (String, u32)> = HashMap::new();
     for (id, (point, set)) in &capture_hosts {
         if let Some(set) = set

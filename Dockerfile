@@ -15,8 +15,7 @@ RUN cargo build --release -p vpd
 
 FROM gcr.io/distroless/cc-debian12:nonroot
 LABEL org.opencontainers.image.title="voip-panel" \
-      org.opencontainers.image.description="SIP/VoIP capture, troubleshooting and monitoring panel" \
-      org.opencontainers.image.source="https://github.com/noorotk/voip-panel"
+      org.opencontainers.image.description="SIP/VoIP capture, troubleshooting and monitoring panel"
 COPY --from=core /src/target/release/vpd /usr/local/bin/vpd
 ENV VP_LISTEN=0.0.0.0:8080
 EXPOSE 8080 9060/udp 9060/tcp

@@ -5,6 +5,10 @@ use crate::sql::quote;
 use serde::Serialize;
 
 pub fn normalize(raw: &str) -> String {
+    // Named accounts such as "alice" are identities too, not malformed numbers.
+    if raw.chars().any(|c| !c.is_ascii_digit() && !"+-(). *".contains(c)) {
+        return raw.to_string();
+    }
     let d: String = raw.chars().filter(|c| c.is_ascii_digit() || *c == '+').collect();
     if let Some(r) = d.strip_prefix("+964") {
         return format!("964{r}");
@@ -323,6 +327,13 @@ mod tests {
         assert_eq!(parse("10.0.0.1")[0].field, "ip");
         assert_eq!(parse("a84b4c76e66710@pc33")[0].field, "callid");
         assert_eq!(parse("*2345")[0].value, "*2345");
+    }
+
+    #[test]
+    fn named_accounts_are_kept() {
+        assert_eq!(normalize("alice"), "alice");
+        assert_eq!(normalize("07701234567"), "9647701234567");
+        assert_eq!(normalize("+964 770 123 4567"), "9647701234567");
     }
 
     #[test]
