@@ -28,6 +28,7 @@ pub const FIELDS: &[(&str, &str)] = &[
     ("number", "Either party"),
     ("callid", "Any leg's Call-ID or correlation ID"),
     ("capture", "HEP capture ID or node name, e.g. capture:201"),
+    ("source", "HEP sender address or its alias, e.g. source:10.0.0.5"),
     ("backend", "asterisk, freeswitch, opensips, kamailio"),
     ("ip", "Caller or callee IP"),
     ("trunk", "Carrier name"),
@@ -66,6 +67,7 @@ fn canonical(field: &str) -> &str {
     match field {
         "captureid" | "hep" | "hepid" | "agent" => "capture",
         "cid" | "correlation" | "correlationid" | "xcid" => "callid",
+        "ingress" | "sender" => "source",
         other => other,
     }
 }
@@ -222,6 +224,7 @@ fn sql_for(field: &str, op: &str, v: &str) -> Option<String> {
             Err(_) => format!("has(capture_points, {})", quote(v)),
         }),
         "backend" => text("backend"),
+        "source" => Some(format!("(has(agent_ips, {0}) OR has(capture_points, {0}))", quote(v))),
         "ip" => {
             if v.contains('/') {
                 Some(format!("(isIPAddressInRange(caller_ip, {0}) OR isIPAddressInRange(callee_ip, {0}))", quote(v)))
@@ -282,13 +285,14 @@ pub fn to_sql(tokens: &[Token]) -> String {
     parts.join(" AND ")
 }
 
-pub const FACETS: &[&str] = &["status", "capture", "backend", "trunk", "direction", "state", "finding", "vendor", "node", "codec", "group", "end", "cause"];
+pub const FACETS: &[&str] = &["status", "source", "capture", "backend", "trunk", "direction", "state", "finding", "vendor", "node", "codec", "group", "end", "cause"];
 
 /// The SQL expression that produces a facet's values, one row per value.
 pub fn facet_expr(name: &str) -> Option<&'static str> {
     Some(match name {
         "status" => "toString(final_status)",
         "capture" => "toString(arrayJoin(capture_ids))",
+        "source" => "arrayJoin(agent_ips)",
         "backend" => "backend",
         "trunk" => "trunk",
         "direction" => "direction",

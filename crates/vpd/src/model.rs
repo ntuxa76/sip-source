@@ -49,6 +49,7 @@ pub struct Call {
     pub backend: String,
     pub capture_ids: Vec<u32>,
     pub capture_points: Vec<String>,
+    pub agent_ips: Vec<String>,
     pub media_node: String,
     pub final_status: u16,
     pub final_reason: String,
@@ -82,7 +83,7 @@ pub struct Call {
 /// Every column of `v_calls` a `Call` needs, with times as epoch microseconds.
 pub const CALL_SELECT: &str = "call_uid, state, toUnixTimestamp64Micro(start_ts) AS start_us, toUnixTimestamp64Micro(ring_ts) AS ring_us,
  toUnixTimestamp64Micro(answer_ts) AS answer_us, toUnixTimestamp64Micro(end_ts) AS end_us, pdd_ms, setup_ms, talk_ms, egress_pdd_ms,
- caller, caller_n, callee, callee_n, direction, ingress_group, egress_group, trunk, node, pbx, backend, capture_ids, capture_points, media_node,
+ caller, caller_n, callee, callee_n, direction, ingress_group, egress_group, trunk, node, pbx, backend, capture_ids, capture_points, agent_ips, media_node,
  final_status, final_reason, egress_status, q850_cause, end_cause, hangup_side, root_call_id, b_call_id, legs, link, codecs,
  ua_caller, ua_callee, ua_vendor, ua_model, caller_ip, callee_ip, caller_country, min_mos, max_loss_pct, max_jitter_ms, max_rtt_ms,
  mos_estimated, media_a_to_b, media_b_to_a, findings, msg_count";
@@ -133,6 +134,7 @@ impl Call {
             backend: text(v, "backend"),
             capture_ids: v["capture_ids"].as_array().map(|a| a.iter().filter_map(|x| x.as_u64().map(|n| n as u32)).collect()).unwrap_or_default(),
             capture_points: strings(v, "capture_points"),
+            agent_ips: strings(v, "agent_ips"),
             media_node: text(v, "media_node"),
             final_status: v["final_status"].as_u64().unwrap_or(0) as u16,
             final_reason: text(v, "final_reason"),

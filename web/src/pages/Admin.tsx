@@ -12,7 +12,7 @@ const SECTIONS = [
   { id: "roles", label: "Roles & permissions", perm: "roles_manage" },
   { id: "settings", label: "Settings", perm: "settings_manage" },
   { id: "storage", label: "Storage", perm: "storage_manage" },
-  { id: "agents", label: "Agents", perm: "system_view" },
+  { id: "sources", label: "Sources", perm: "system_view" },
   { id: "system", label: "System health", perm: "system_view" },
   { id: "audit", label: "Audit log", perm: "audit_read" },
 ];
@@ -59,7 +59,7 @@ export function AdminPage({ section }: { section: string }) {
         {section === "roles" && <Roles />}
         {section === "settings" && <SettingsPanel />}
         {section === "storage" && <Storage />}
-        {["agents", "system"].includes(section) && <Sample section={section} />}
+        {["sources", "system"].includes(section) && <Sample section={section} />}
         {section === "audit" && <AuditLog />}
       </Card>
     </div>
@@ -72,7 +72,7 @@ function Sample({ section }: { section: string }) {
   if (!data) return <Loading />;
   return (
     <div>
-      {section === "agents" && <Agents rows={data} />}
+      {section === "sources" && <Sources rows={data} />}
       {section === "system" && <System data={data} />}
     </div>
   );
@@ -354,7 +354,12 @@ function SettingsPanel() {
   );
 }
 
-const blankStorage = { id: 0, name: "", type: "clickhouse", config: { host: "", port: 8123, database: "default", username: "default", tls: false }, password: "" };
+const blankStorage = { id: 0, name: "", type: "clickhouse", config: { host: "", port: 8123, database: "sip_source", username: "default", tls: false }, password: "" };
+
+const BACKENDS = [
+  { value: "local", label: "Local file", text: "Stored on this server in the data volume. Nothing else to run." },
+  { value: "clickhouse", label: "ClickHouse server", text: "Your own ClickHouse, for more traffic, longer history or several panels." },
+];
 
 function Storage() {
   const client = useQueryClient();
@@ -381,8 +386,8 @@ function Storage() {
   return (
     <div>
       <div className="flex items-center justify-between gap-3 px-3 py-2">
-        <p className="text-ink-2 text-xs max-w-[720px]">Where captured data lives. Connections are saved in MariaDB. Selecting one creates its tables if needed, and new traffic is written there.</p>
-        <Button variant="primary" onClick={() => { setProblem(""); setEditing({ ...blankStorage }); }}><Plus size={13} />Add ClickHouse</Button>
+        <p className="text-ink-2 text-xs max-w-[720px]">Where captured data lives. The built-in Local file storage works out of the box; add a ClickHouse server when you need more. Selecting a storage creates its tables if needed, and new traffic is written there.</p>
+        <Button variant="primary" onClick={() => { setProblem(""); setEditing({ ...blankStorage }); }}><Plus size={13} />Add storage</Button>
       </div>
       {!data.encryption_key_set && <p className="text-warn text-xs px-3 pb-2">VP_SECRET_KEY isn't set, so storage passwords are kept unencrypted in MariaDB.</p>}
       {problem && !editing && <p className="text-crit px-3 pb-2">{problem}</p>}
@@ -393,7 +398,8 @@ function Storage() {
             <div key={s.id} className={`border rounded-md p-3 ${s.active ? "border-accent" : "border-line"}`}>
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="font-semibold">{s.name}</span>
-                <Badge>{s.type}</Badge>
+                <Badge>{s.type === "local" ? "Local file" : "ClickHouse"}</Badge>
+                {s.built_in && <Badge>Built in</Badge>}
                 {s.active && <Badge tone="info">In use</Badge>}
                 <div className="flex-1" />
                 <Button onClick={() => test.mutate(s.id)} disabled={test.isPending}>Test connection</Button>
@@ -401,6 +407,7 @@ function Storage() {
                 {!s.built_in && <Button onClick={() => { setProblem(""); setEditing({ ...s, password: "" }); }}><Pencil size={13} />Edit</Button>}
                 {!s.built_in && !s.active && <Button onClick={() => confirm(`Remove ${s.name}?`) && remove.mutate(s.id)}><Trash2 size={13} /></Button>}
               </div>
+              {s.type === "local" && <p className="text-xs text-ink-2 mt-1">On this server, database <span className="font-mono">{s.config.database}</span></p>}
               {s.type === "clickhouse" && <p className="text-xs text-ink-2 font-mono mt-1">{s.config.tls ? "https" : "http"}://{s.config.host}:{s.config.port}/{s.config.database} as {s.config.username}{s.encrypted ? " · password encrypted" : ""}</p>}
               {(r || s.last_test_at) && (
                 <p className={`text-xs mt-1 ${(r?.ok ?? s.last_test_ok) ? "text-good" : "text-crit"}`}>
@@ -413,9 +420,27 @@ function Storage() {
         })}
       </div>
       {editing && (
-        <SidePanel title={editing.id ? `Edit ${editing.name}` : "Add ClickHouse storage"} onClose={() => setEditing(null)}>
+        <SidePanel title={editing.id ? `Edit ${editing.name}` : "Add storage"} onClose={() => setEditing(null)}>
           <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); save.mutate(editing); }}>
+            {!editing.id && (
+              <fieldset>
+                <legend className="text-xs text-ink-2 mb-1.5">Backend</legend>
+                <div className="grid grid-cols-2 gap-2">
+                  {BACKENDS.map((b) => (
+                    <label key={b.value} className={`rounded-lg border p-2.5 cursor-pointer ${editing.type === b.value ? "border-accent bg-accent-wash" : "border-line hover:border-line-2"}`}>
+                      <input type="radio" name="backend" value={b.value} checked={editing.type === b.value} onChange={() => setEditing({ ...editing, type: b.value })} className="sr-only" />
+                      <span className="block font-medium text-[12.5px]">{b.label}</span>
+                      <span className="block text-[11.5px] text-ink-3 mt-0.5 leading-snug">{b.text}</span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            )}
             <Row label="Name"><input autoFocus value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} className={field} /></Row>
+            {editing.type === "local" ? (
+              <Row label="Database"><input value={editing.config.database} onChange={(e) => setC({ database: e.target.value })} className={field} /></Row>
+            ) : (
+            <>
             <div className="grid grid-cols-[1fr_110px] gap-2">
               <Row label="Host"><input value={editing.config.host} onChange={(e) => setC({ host: e.target.value })} placeholder="clickhouse.example.net" className={field} /></Row>
               <Row label="HTTP port"><input type="number" value={editing.config.port} onChange={(e) => setC({ port: Number(e.target.value) })} className={field} /></Row>
@@ -426,6 +451,8 @@ function Storage() {
               <Row label={editing.id ? "Password (blank keeps the current one)" : "Password"}><input type="password" autoComplete="new-password" value={editing.password} onChange={(e) => setEditing({ ...editing, password: e.target.value })} className={field} /></Row>
             </div>
             <Toggle checked={editing.config.tls} onChange={(v) => setC({ tls: v })}>Use HTTPS</Toggle>
+            </>
+            )}
             {problem && <p className="text-crit">{problem}</p>}
             <div><Button variant="primary" type="submit">Save</Button></div>
           </form>
@@ -435,31 +462,36 @@ function Storage() {
   );
 }
 
-function Agents({ rows }: { rows: any[] }) {
-  const { tz } = usePrefs();
+function Sources({ rows }: { rows: any[] }) {
+  const { tz, can } = usePrefs();
   const client = useQueryClient();
-  const { can } = usePrefs();
   const rename = useMutation({
-    mutationFn: ({ id, name }: { id: number; name: string }) => put(`/admin/agents/${id}`, { name }),
-    onSuccess: () => client.invalidateQueries({ queryKey: ["admin", "agents"] }),
+    mutationFn: ({ ip, alias }: { ip: string; alias: string }) => put(`/admin/sources/${encodeURIComponent(ip)}`, { alias }),
+    onSuccess: () => {
+      client.invalidateQueries({ queryKey: ["admin", "sources"] });
+      client.invalidateQueries({ queryKey: ["sources"] });
+    },
   });
-  if (rows.length === 0) return <p className="text-ink-2 p-3">No capture agent has sent HEP yet. Point your SIP server at port 9060 of this panel.</p>;
+  if (rows.length === 0) return <p className="text-ink-2 p-4">No HEP received yet. Point your SIP servers at port 9060 of this server; each sender appears here by its address.</p>;
   return (
-    <table className="w-full">
-      <thead><tr><th>Capture ID</th><th>Name</th><th>Source</th><th>HEP</th><th>Packets</th><th>Clock offset</th><th>Last seen</th><th>Status</th></tr></thead>
-      <tbody>{rows.map((r) => (
-        <tr key={r.id}>
-          <td className="font-mono text-xs">{r.id}</td>
-          <td>{can("settings_manage") ? <input aria-label={`Name of capture ${r.id}`} defaultValue={r.name} onBlur={(e) => { const name = e.target.value.trim(); if (name && name !== r.name) rename.mutate({ id: r.id, name }); }} className="h-7 rounded bg-sunken border border-line px-1.5" /> : r.name}</td>
-          <td className="font-mono text-xs">{r.host}</td>
-          <td>v{r.hep_version}</td>
-          <td className="tnum">{r.packets.toLocaleString()}</td>
-          <td className="tnum">{r.offset_ms} ms</td>
-          <td>{r.last_seen ? fmtDateTime(r.last_seen, tz).slice(5) : "never"}</td>
-          <td><Badge tone={r.status === "active" ? "good" : "warn"}>{r.status}</Badge></td>
-        </tr>
-      ))}</tbody>
-    </table>
+    <div>
+      <p className="text-ink-2 text-xs px-4 pt-3 pb-2 max-w-[720px]">Every server that sends HEP, by address. Give each one an alias, such as Asterisk-1 or OpenSIPS-edge; the source picker at the top shows it. The alias names new traffic, already stored calls keep the name they had.</p>
+      <table className="data-table">
+        <thead><tr><th>Address</th><th>Alias</th><th>Capture ID</th><th>HEP</th><th className="num">Packets</th><th className="num">Clock offset</th><th>Last seen</th><th>Status</th></tr></thead>
+        <tbody>{rows.map((r) => (
+          <tr key={r.ip}>
+            <td className="font-mono text-xs">{r.ip}</td>
+            <td>{can("settings_manage") ? <input aria-label={`Alias for ${r.ip}`} defaultValue={r.alias} placeholder="Add an alias" onBlur={(e) => { const alias = e.target.value.trim(); if (alias !== r.alias) rename.mutate({ ip: r.ip, alias }); }} onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()} className="h-8 w-[200px] rounded-lg bg-raised border border-line-2 px-2" /> : (r.alias || <span className="text-ink-3">–</span>)}</td>
+            <td className="tnum">{r.capture_id}</td>
+            <td>v{r.hep_version}</td>
+            <td className="num">{r.packets.toLocaleString()}</td>
+            <td className="num">{r.offset_ms} ms</td>
+            <td>{r.last_seen ? fmtDateTime(r.last_seen, tz).slice(5) : "before restart"}</td>
+            <td><Badge tone={r.status === "active" ? "good" : r.status === "clock skew" ? "warn" : "neutral"}>{r.status}</Badge></td>
+          </tr>
+        ))}</tbody>
+      </table>
+    </div>
   );
 }
 
@@ -489,7 +521,7 @@ function System({ data }: { data: any }) {
         <KV label="HEP UDP">{data.listeners.hep_udp || "off"}</KV>
         <KV label="HEP TCP">{data.listeners.hep_tcp || "off"}</KV>
         <KV label="HEP auth key">{data.auth_key ? "required" : "not set"}</KV>
-        <KV label="ClickHouse">{ch ? `${ch.version} · ${ch.database}` : "none selected"}</KV>
+        <KV label="Storage engine">{ch ? `ClickHouse ${ch.version} · ${ch.database}` : "starting"}</KV>
       </div>
       {ch && ch.tables.length > 0 && (
         <table className="w-full">

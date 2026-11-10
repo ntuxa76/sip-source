@@ -93,7 +93,7 @@ export function WorkbenchPage() {
           <Card>
             <div ref={editorEl} className="h-[220px] overflow-hidden rounded-t-lg" />
             <div className="flex items-center justify-between gap-3 px-3 py-2 border-t border-line">
-              <span className="text-ink-3 text-xs">{`Running on ${storage.data?.name || "ClickHouse"} as read-only.`}</span>
+              <span className="text-ink-3 text-xs">{`Running on ${storage.data?.name || "the selected storage"} as read-only.`}</span>
               <Button variant="primary" onClick={execute} disabled={run.isPending}><Play size={13} />Run</Button>
             </div>
           </Card>

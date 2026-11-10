@@ -1,12 +1,12 @@
-# voip-panel
+# sip-source
 
-SIP/VoIP troubleshooting and monitoring panel, built to replace HOMER 11.
+SIP capture and troubleshooting panel, built to replace HOMER 11.
 
-SIP servers send it HEP. It stores the traffic in your ClickHouse, joins the legs into calls, and gives you search, call flows, registrations, media quality and dashboards. Users, roles, dashboards and settings live in MariaDB.
+SIP servers send it HEP. It stores the traffic, joins the legs into calls, and gives you search, call flows, registrations, media quality and dashboards. Captured data goes to the built-in Local file storage, or to your own ClickHouse. Users, roles, dashboards and settings live in MariaDB.
 
 ## Run it
 
-The image is `ntuxa76/sip-source:0.2` on Docker Hub. You need Docker (or Podman) and a ClickHouse server. MariaDB comes with the compose file, or you can use your own.
+The image is `ntuxa76/sip-source:0.3` on Docker Hub. You need Docker (or Podman). MariaDB comes with the compose file, or you can use your own. A ClickHouse server is optional.
 
 ### With Docker Compose (runs the panel and MariaDB)
 
@@ -27,20 +27,23 @@ docker compose up -d
 Only three settings are required. The database must already exist.
 
 ```bash
-docker run -d --name voip-panel -p 8080:8080 -p 9060:9060/udp -p 9060:9060/tcp \
+docker run -d --name sip-source -p 8080:8080 -p 9060:9060/udp -p 9060:9060/tcp \
+  -v sip-source-data:/data \
   -e VP_DB_HOST=your-mariadb \
   -e VP_DB_USER=voip_panel \
   -e VP_DB_PASSWORD=your-password \
-  ntuxa76/sip-source:0.2
+  ntuxa76/sip-source:0.3
 ```
 
 Open <http://localhost:8080>. On first start the login page asks you to create the administrator password, then takes you straight into the app. **Until that's done, anyone who reaches the port can claim the admin account**, so set `VP_SETUP_TOKEN` if the port is exposed, or `VP_ADMIN_PASSWORD` to skip the screen.
 
 The container listens on plain HTTP. Put a TLS proxy in front of it for anything beyond a test.
 
-### Connect ClickHouse
+### Storage
 
-Go to **Admin → Storage**, add your ClickHouse (HTTP port, usually 8123), press Test, then Select. The panel creates the database, tables and views. The user needs `CREATE`, `ALTER`, `INSERT` and `SELECT` on that database. Traffic received before a storage is selected is dropped and counted under **Admin → System health**.
+Captured data goes to the built-in **Local file** storage from the first start. It keeps everything under `/data` in the container, so keep that on a volume as above; the compose file does this already. Search, dashboards and SQL work the same on it as on ClickHouse, because it runs the same engine inside the container. It uses up to half the container's memory.
+
+To use your own ClickHouse instead, go to **Admin → Storage**, press **Add storage**, choose **ClickHouse server**, enter its HTTP port (usually 8123), press Test, then **Use this storage**. The panel creates the database, tables and views, and stops the local engine. The ClickHouse user needs `CREATE`, `ALTER`, `INSERT` and `SELECT` on that database. Data already in the Local file storage stays there; it isn't copied.
 
 ### Point Asterisk at it
 
@@ -68,7 +71,11 @@ asterisk -rx "module load res_hep_pjsip.so"
 asterisk -rx "module load res_hep_rtcp.so"
 ```
 
-`res_hep_pjsip` only sees PJSIP. It doesn't capture `chan_sip`. The server appears under **Admin → Agents** with the first packet, where you can give it a name.
+`res_hep_pjsip` only sees PJSIP. It doesn't capture `chan_sip`.
+
+### Sources
+
+Every server that sends HEP shows up under **Admin → Sources** by its address with the first packet. Give each one an alias there, such as `Asterisk-1` or `OpenSIPS-edge`. The source menu in the top bar then lets you look at one server at a time: dashboards, search and live capture all follow it. In search, `source:10.0.0.5` does the same.
 
 If you set `VP_HEP_AUTH_KEY`, set the same value as `capture_password` in `hep.conf`.
 
@@ -94,7 +101,7 @@ Every setting has an environment variable, `VP_<NAME>`. All are optional except 
 
 - [`docs/ENVIRONMENT.md`](docs/ENVIRONMENT.md) lists every variable with its default and what it does.
 - [`.env.example`](.env.example) is the same list, ready to copy.
-- `docker run --rm ntuxa76/sip-source:0.2 env` prints the reference from the image itself.
+- `docker run --rm ntuxa76/sip-source:0.3 env` prints the reference from the image itself.
 
 Application settings can also be changed under **Admin → Settings** and are saved in MariaDB. A value set in the environment takes priority and appears locked there. Invalid values stop the container at startup with a message saying which one is wrong.
 

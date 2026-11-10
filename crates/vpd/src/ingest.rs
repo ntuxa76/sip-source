@@ -27,11 +27,13 @@ enum Row_ {
     Log(String),
 }
 
+/// One HEP sender, identified by its address. Several servers often share Asterisk's default
+/// capture ID, so the address is what tells them apart.
 #[derive(Default, Clone, Serialize)]
 pub struct AgentStats {
-    pub id: u32,
-    pub name: String,
-    pub source_ip: String,
+    pub ip: String,
+    pub alias: String,
+    pub capture_id: u32,
     pub hep_version: u8,
     pub packets: u64,
     pub bytes: u64,
@@ -45,6 +47,13 @@ pub struct AgentStats {
     minute_offset_sum: f64,
 }
 
+impl AgentStats {
+    /// The alias given in Admin, or the address.
+    pub fn label(&self) -> String {
+        if self.alias.is_empty() { self.ip.clone() } else { self.alias.clone() }
+    }
+}
+
 struct PendingRegister {
     ts: i64,
     sip: sip::Sip,
@@ -52,6 +61,7 @@ struct PendingRegister {
     src_port: u16,
     transport: String,
     capture_id: u32,
+    agent_ip: String,
     node: String,
     challenged: bool,
 }
@@ -70,7 +80,8 @@ struct Minute {
 
 pub struct Ingest {
     tx: mpsc::Sender<Row_>,
-    pub agents: RwLock<HashMap<u32, AgentStats>>,
+    /// Keyed by the sender's address.
+    pub agents: RwLock<HashMap<String, AgentStats>>,
     /// Call-IDs with new messages, and when they were last touched.
     pub dirty: Mutex<HashMap<String, i64>>,
     registers: Mutex<HashMap<(String, u32), PendingRegister>>,
@@ -99,21 +110,22 @@ impl Ingest {
     fn agent_name(&self, h: &Hep, peer: &str, offset_ms: f64, bytes: usize) -> (String, bool) {
         let now = Ts(now_us());
         let mut agents = self.agents.write().unwrap();
-        let new = !agents.contains_key(&h.capture_id);
-        let a = agents.entry(h.capture_id).or_insert_with(|| AgentStats { id: h.capture_id, name: format!("capture-{}", h.capture_id), first_seen: Some(now), ..AgentStats::default() });
+        let new = !agents.contains_key(peer);
+        let a = agents.entry(peer.to_string()).or_insert_with(|| AgentStats { ip: peer.to_string(), first_seen: Some(now), ..AgentStats::default() });
+        // A name sent in HEP is a starting alias; one set in Admin is never replaced.
         if let Some(n) = &h.agent_name
-            && a.name == format!("capture-{}", h.capture_id)
+            && a.alias.is_empty()
         {
-            a.name = n.clone();
+            a.alias = n.clone();
         }
-        a.source_ip = peer.to_string();
+        a.capture_id = h.capture_id;
         a.hep_version = h.version;
         a.packets += 1;
         a.bytes += bytes as u64;
         a.last_seen = Some(now);
         a.minute_packets += 1;
         a.minute_offset_sum += offset_ms;
-        (a.name.clone(), new)
+        (a.label(), new)
     }
 }
 
@@ -149,12 +161,12 @@ fn transport(h: &Hep, via: &str) -> String {
     }
 }
 
-fn handle_sip(app: &App, ing: &Ingest, h: &Hep, ts: i64, ingest_ts: i64, node: &str) {
+fn handle_sip(app: &App, ing: &Ingest, h: &Hep, ts: i64, ingest_ts: i64, node: &str, peer: &str) {
     let text = String::from_utf8_lossy(&h.payload);
     let Some(s) = sip::parse(&text) else {
         ing.drop_packet("parse_error");
         let row = json!({
-            "ts": ch_time(ts), "ingest_ts": ch_time(ingest_ts), "kind": "other", "capture_id": h.capture_id, "capture_point": node,
+            "ts": ch_time(ts), "ingest_ts": ch_time(ingest_ts), "kind": "other", "capture_id": h.capture_id, "capture_point": node, "agent_ip": peer,
             "src_ip": h.src_ip, "src_port": h.src_port, "dst_ip": h.dst_ip, "dst_port": h.dst_port, "transport": "udp",
             "call_id": "", "parse_error": true, "payload": text.as_ref(),
         });
@@ -167,7 +179,7 @@ fn handle_sip(app: &App, ing: &Ingest, h: &Hep, ts: i64, ingest_ts: i64, node: &
     let (codecs, sdp_ip, sdp_dir) = s.sdp.as_ref().map(|d| (d.codecs.clone(), d.ip.clone(), d.direction.clone())).unwrap_or_default();
     let row = json!({
         "ts": ch_time(ts), "ingest_ts": ch_time(ingest_ts), "kind": if is_dialog { "dialog" } else { "other" },
-        "capture_id": h.capture_id, "capture_point": node,
+        "capture_id": h.capture_id, "capture_point": node, "agent_ip": peer,
         "src_ip": h.src_ip, "src_port": h.src_port, "dst_ip": h.dst_ip, "dst_port": h.dst_port,
         "transport": transport(h, &s.via_transport), "call_id": s.call_id, "is_request": s.is_request, "method": s.method,
         "status": s.status, "reason": s.reason, "cseq_num": s.cseq_num, "cseq_method": s.cseq_method,
@@ -193,7 +205,7 @@ fn handle_sip(app: &App, ing: &Ingest, h: &Hep, ts: i64, ingest_ts: i64, node: &
         ing.dirty.lock().unwrap().insert(s.call_id.clone(), ingest_ts);
     }
     if is_register {
-        handle_register(app, ing, h, ts, node, s.clone());
+        handle_register(app, ing, h, ts, node, peer, s.clone());
     }
     if ing.live.receiver_count() > 0 {
         let event = json!({
@@ -201,7 +213,7 @@ fn handle_sip(app: &App, ing: &Ingest, h: &Hep, ts: i64, ingest_ts: i64, node: &
             "class": match s.status { 0 => "request", 100..=199 => "provisional", 200..=299 => "success", 300..=399 => "redirect", 400..=499 => "client_error", _ => "server_error" },
             "from": format!("{}:{}", h.src_ip, h.src_port), "to": format!("{}:{}", h.dst_ip, h.dst_port), "retx": 0,
             "caller": s.from_user, "callee": s.to_user, "state": if s.is_request { s.method.to_lowercase() } else { s.status.to_string() },
-            "node": node, "ua": s.user_agent, "capture_id": h.capture_id, "cseq_method": s.cseq_method,
+            "node": node, "ua": s.user_agent, "capture_id": h.capture_id, "agent_ip": peer, "cseq_method": s.cseq_method,
         });
         let _ = ing.live.send(Arc::new(event.to_string()));
     }
@@ -220,13 +232,13 @@ fn write_registration(app: &App, ing: &Ingest, p: &PendingRegister, result: &str
         "ts": ch_time(p.ts), "aor": format!("{}@{}", p.sip.to_user, p.sip.to_domain), "number": number, "grp": group_of(app, &p.src_ip),
         "contact": p.sip.contact, "src_ip": p.src_ip, "src_port": p.src_port, "transport": p.transport, "user_agent": p.sip.user_agent,
         "expires_requested": expires_requested, "expires_granted": granted, "result": result, "code": code,
-        "rrd_ms": end_ts.map(|e| ((e - p.ts) / 1000).max(0)), "node": p.node, "capture_id": p.capture_id,
+        "rrd_ms": end_ts.map(|e| ((e - p.ts) / 1000).max(0)), "node": p.node, "capture_id": p.capture_id, "agent_ip": p.agent_ip,
         "nat": !contact_ip.is_empty() && contact_ip != p.src_ip, "challenged": p.challenged,
     });
     ing.send(Row_::Registration(row.to_string()));
 }
 
-fn handle_register(app: &App, ing: &Ingest, h: &Hep, ts: i64, node: &str, s: sip::Sip) {
+fn handle_register(app: &App, ing: &Ingest, h: &Hep, ts: i64, node: &str, peer: &str, s: sip::Sip) {
     let key = (s.call_id.clone(), s.cseq_num);
     let mut map = ing.registers.lock().unwrap();
     if s.is_request {
@@ -235,7 +247,7 @@ fn handle_register(app: &App, ing: &Ingest, h: &Hep, ts: i64, node: &str, s: sip
             return;
         }
         let challenged = map.iter().any(|((cid, seq), p)| *cid == s.call_id && *seq < s.cseq_num && p.challenged);
-        map.insert(key, PendingRegister { ts, transport: transport(h, &s.via_transport), sip: s, src_ip: h.src_ip.clone(), src_port: h.src_port, capture_id: h.capture_id, node: node.to_string(), challenged });
+        map.insert(key, PendingRegister { ts, transport: transport(h, &s.via_transport), sip: s, src_ip: h.src_ip.clone(), src_port: h.src_port, capture_id: h.capture_id, agent_ip: peer.to_string(), node: node.to_string(), challenged });
         return;
     }
     if s.status < 200 {
@@ -294,7 +306,7 @@ fn estimate_mos(loss_pct: f64, jitter_ms: f64, rtt_ms: f64) -> f64 {
 }
 
 /// Normalizes the RTCP JSON sent by Asterisk (res_hep_rtcp) and rtpengine.
-fn handle_rtcp(ing: &Ingest, h: &Hep, ts: i64, node: &str) {
+fn handle_rtcp(ing: &Ingest, h: &Hep, ts: i64, node: &str, peer: &str) {
     let Ok(v) = serde_json::from_slice::<Value>(&h.payload) else {
         ing.drop_packet("bad_rtcp");
         return;
@@ -315,7 +327,7 @@ fn handle_rtcp(ing: &Ingest, h: &Hep, ts: i64, node: &str) {
     // A sender report with no report block says nothing about received quality.
     let mos = reported.or_else(|| block.map(|_| estimate_mos(loss_pct, jitter_ms, rtt_ms.unwrap_or(0.0))));
     let row = json!({
-        "ts": ch_time(ts), "call_id": call_id, "capture_id": h.capture_id, "capture_point": node, "source": "rtcp",
+        "ts": ch_time(ts), "call_id": call_id, "capture_id": h.capture_id, "capture_point": node, "agent_ip": peer, "source": "rtcp",
         "ssrc": v["ssrc"].to_string().trim_matches('"'), "src_ip": h.src_ip, "dst_ip": h.dst_ip, "packets": packets, "lost": lost,
         "loss_pct": loss_pct, "jitter_ms": jitter_ms, "rtt_ms": rtt_ms, "mos": mos, "mos_estimated": reported.is_none() && mos.is_some(),
     });
@@ -323,14 +335,14 @@ fn handle_rtcp(ing: &Ingest, h: &Hep, ts: i64, node: &str) {
     ing.dirty.lock().unwrap().insert(call_id, now_us());
 }
 
-fn handle_log(ing: &Ingest, h: &Hep, ts: i64, node: &str) {
+fn handle_log(ing: &Ingest, h: &Hep, ts: i64, node: &str, peer: &str) {
     let text = String::from_utf8_lossy(&h.payload).to_string();
     let parsed: Option<Value> = serde_json::from_str(&text).ok();
     let severity = parsed.as_ref().and_then(|v| v["level"].as_str().or(v["severity"].as_str()).map(str::to_uppercase)).unwrap_or_else(|| {
         ["ERROR", "WARNING", "NOTICE", "DEBUG"].iter().find(|s| text.contains(**s)).unwrap_or(&"INFO").to_string()
     });
     let message = parsed.as_ref().and_then(|v| v["message"].as_str().or(v["msg"].as_str()).map(str::to_string)).unwrap_or(text);
-    let row = json!({"ts": ch_time(ts), "call_id": h.correlation.clone().unwrap_or_default(), "capture_id": h.capture_id, "node": node, "severity": severity, "message": message});
+    let row = json!({"ts": ch_time(ts), "call_id": h.correlation.clone().unwrap_or_default(), "capture_id": h.capture_id, "agent_ip": peer, "node": node, "severity": severity, "message": message});
     ing.send(Row_::Log(row.to_string()));
 }
 
@@ -353,7 +365,7 @@ fn handle_packet(app: &App, data: &[u8], peer: &str) {
     let offset_ms = (ingest_ts - ts) as f64 / 1000.0;
     let (node, new_agent) = ing.agent_name(&h, peer, offset_ms, data.len());
     if new_agent {
-        tracing::info!("new capture agent: id {} from {peer}", h.capture_id);
+        tracing::info!("new HEP source {peer} (capture ID {})", h.capture_id);
     }
     {
         let mut m = ing.minute.lock().unwrap();
@@ -361,9 +373,9 @@ fn handle_packet(app: &App, data: &[u8], peer: &str) {
         m.lag_n += 1;
     }
     match h.proto_type {
-        1 => handle_sip(app, ing, &h, ts, ingest_ts, &node),
-        5 => handle_rtcp(ing, &h, ts, &node),
-        100 => handle_log(ing, &h, ts, &node),
+        1 => handle_sip(app, ing, &h, ts, ingest_ts, &node, peer),
+        5 => handle_rtcp(ing, &h, ts, &node, peer),
+        100 => handle_log(ing, &h, ts, &node, peer),
         other => ing.drop_packet(&format!("unsupported_type_{other}")),
     }
 }
@@ -425,6 +437,10 @@ async fn flush(app: &App, sip: &mut String, reg: &mut String, qos: &mut String, 
     let ch = app.storage.read().unwrap().clone();
     for (table, rows, i) in [("sip_messages", &mut *sip, 0usize), ("registration_events", &mut *reg, 1), ("qos_reports", &mut *qos, 2), ("logs", &mut *log, 3)] {
         if rows.is_empty() {
+            continue;
+        }
+        // While the selected storage starts, hold rows for a while instead of dropping them.
+        if ch.is_none() && app.storage_starting.load(std::sync::atomic::Ordering::SeqCst) && rows.len() < 64 << 20 {
             continue;
         }
         let body = std::mem::take(rows);
@@ -501,15 +517,15 @@ async fn minute_job(app: Arc<App>) {
             out.push_str(&json!({"bucket": time, "metric": metric, "dim": dim, "name": name, "value": value}).to_string());
             out.push('\n');
         };
-        let ids: Vec<u32>;
+        let ips: Vec<String>;
         {
             let mut agents = app.ingest.agents.write().unwrap();
-            ids = agents.keys().copied().collect();
+            ips = agents.keys().cloned().collect();
             for a in agents.values_mut() {
-                push("hep_pps", "default", &a.name, a.minute_packets as f64 / 60.0);
+                push("hep_pps", "default", &a.label(), a.minute_packets as f64 / 60.0);
                 if a.minute_packets > 0 {
                     a.clock_offset_ms = a.minute_offset_sum / a.minute_packets as f64;
-                    push("clock_offset", "default", &a.name, a.clock_offset_ms);
+                    push("clock_offset", "default", &a.label(), a.clock_offset_ms);
                 }
                 a.minute_packets = 0;
                 a.minute_offset_sum = 0.0;
@@ -537,7 +553,7 @@ async fn minute_job(app: Arc<App>) {
             }
             *m = Minute::default();
         }
-        persist_agents(&app, &ids).await;
+        persist_sources(&app, &ips).await;
         let ch = app.storage.read().unwrap().clone();
         let Some(ch) = ch else { continue };
         if !out.is_empty()
@@ -555,22 +571,22 @@ async fn minute_job(app: Arc<App>) {
     }
 }
 
-async fn persist_agents(app: &App, ids: &[u32]) {
-    for id in ids {
-        let a = app.ingest.agents.read().unwrap().get(id).cloned();
+async fn persist_sources(app: &App, ips: &[String]) {
+    for ip in ips {
+        let a = app.ingest.agents.read().unwrap().get(ip).cloned();
         let Some(a) = a else { continue };
-        let _ = sqlx::query("INSERT INTO agents (capture_id, name, source_ip, last_seen) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE source_ip = VALUES(source_ip), last_seen = VALUES(last_seen)")
-            .bind(a.id).bind(&a.name).bind(&a.source_ip).bind(crate::db::utc_now()).execute(&app.db).await;
+        let _ = sqlx::query("INSERT INTO sources (ip, alias, capture_id, last_seen) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE capture_id = VALUES(capture_id), last_seen = VALUES(last_seen)")
+            .bind(&a.ip).bind(&a.alias).bind(a.capture_id).bind(crate::db::utc_now()).execute(&app.db).await;
     }
 }
 
-/// Names given in the Admin page survive restarts.
-pub async fn load_agents(app: &App) -> Result<(), sqlx::Error> {
-    let rows = sqlx::query("SELECT capture_id, name, source_ip FROM agents").fetch_all(&app.db).await?;
+/// Aliases given in Admin survive restarts.
+pub async fn load_sources(app: &App) -> Result<(), sqlx::Error> {
+    let rows = sqlx::query("SELECT ip, alias, capture_id FROM sources").fetch_all(&app.db).await?;
     let mut agents = app.ingest.agents.write().unwrap();
     for r in rows {
-        let id: u32 = r.get("capture_id");
-        agents.insert(id, AgentStats { id, name: r.get("name"), source_ip: r.get("source_ip"), ..AgentStats::default() });
+        let ip: String = r.get("ip");
+        agents.insert(ip.clone(), AgentStats { ip, alias: r.get("alias"), capture_id: r.get("capture_id"), ..AgentStats::default() });
     }
     Ok(())
 }

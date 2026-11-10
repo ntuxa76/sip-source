@@ -30,6 +30,7 @@ pub const CALL_COLUMNS: &[(&str, &str, &str)] = &[
     ("media_node", "String", "Capture point that reported media"),
     ("capture_ids", "Array(UInt32)", "HEP capture IDs that saw the call"),
     ("capture_points", "Array(String)", "Capture point names"),
+    ("agent_ips", "Array(String)", "Addresses of the HEP senders that saw the call"),
     ("final_status", "UInt16", "Status as the caller saw it"),
     ("final_reason", "String", "Reason phrase"),
     ("egress_status", "UInt16", "Status from the egress leg"),
@@ -63,7 +64,7 @@ pub fn schema_json() -> Value {
     json!([
         {"name": "v_calls", "description": "One row per correlated call", "columns": calls},
         {"name": "v_findings", "description": "One row per diagnostic finding, with the call's columns", "columns": findings},
-        {"name": "v_messages", "description": "Every captured SIP message", "columns": cols(&[("ts", "DateTime64", "Capture time"), ("capture_id", "UInt32", "HEP capture ID"), ("capture_point", "String", "Agent name"), ("call_id", "String", "SIP Call-ID"), ("method", "String", "Request method"), ("status", "UInt16", "Response code"), ("from_user", "String", "From user"), ("to_user", "String", "To user"), ("src_ip", "String", "Source"), ("dst_ip", "String", "Destination"), ("user_agent", "String", "User agent"), ("payload", "String", "Raw message")])},
+        {"name": "v_messages", "description": "Every captured SIP message", "columns": cols(&[("ts", "DateTime64", "Capture time"), ("capture_id", "UInt32", "HEP capture ID"), ("capture_point", "String", "Source name"), ("agent_ip", "String", "HEP sender address"), ("call_id", "String", "SIP Call-ID"), ("method", "String", "Request method"), ("status", "UInt16", "Response code"), ("from_user", "String", "From user"), ("to_user", "String", "To user"), ("src_ip", "String", "Source"), ("dst_ip", "String", "Destination"), ("user_agent", "String", "User agent"), ("payload", "String", "Raw message")])},
         {"name": "v_registrations", "description": "One row per registration attempt", "columns": cols(&[("ts", "DateTime64", "Attempt time"), ("aor", "String", "Address of record"), ("number", "String", "Normalized number"), ("result", "String", "registered, refreshed, deregistered, auth_failed, rejected, no_response"), ("code", "UInt16", "Final code"), ("rrd_ms", "Nullable(UInt32)", "Registration delay"), ("src_ip", "String", "Source address"), ("user_agent", "String", "User agent"), ("grp", "String", "Topology group")])},
         {"name": "v_qos_reports", "description": "RTCP media reports", "columns": cols(&[("ts", "DateTime64", "Report time"), ("call_id", "String", "SIP Call-ID"), ("ssrc", "String", "Stream"), ("loss_pct", "Float32", "Packet loss"), ("jitter_ms", "Float32", "Jitter"), ("rtt_ms", "Nullable(Float32)", "Round trip"), ("mos", "Nullable(Float32)", "MOS")])},
         {"name": "v_logs", "description": "Log lines sent over HEP", "columns": cols(&[("ts", "DateTime64", "Time"), ("call_id", "String", "SIP Call-ID"), ("node", "String", "Capture point"), ("severity", "String", "Level"), ("message", "String", "Text")])},

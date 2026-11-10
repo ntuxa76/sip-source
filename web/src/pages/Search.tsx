@@ -6,12 +6,13 @@ import { HistogramStrip } from "../components/charts";
 import { Button, Card, Empty, ErrorNote, FindingBadge, Loading, MosCell, RegStatus, Select, StatusChip } from "../components/ui";
 import { del, get, post, qs } from "../lib/api";
 import type { Call } from "../lib/api";
-import { rangeParam, usePrefs, useRange } from "../lib/context";
+import { rangeParam, usePrefs, useRange, useSource } from "../lib/context";
 import { fmtDateTime, fmtDuration } from "../lib/format";
 import { fieldValue, hasValue, removeToken, setField, toggleValue, tokenize, parseToken } from "../lib/query";
 
 const FACET_LABELS: Record<string, string> = {
   status: "Status code",
+  source: "Source",
   capture: "Capture ID",
   backend: "Backend",
   trunk: "Trunk",
@@ -291,12 +292,13 @@ export function SearchPage() {
   const facets = prefs.searchFacets ?? DEFAULT_FACETS;
   const columnIds = prefs.searchColumns ?? DEFAULT_COLUMNS;
   const columns = COLUMNS.filter((c) => columnIds.includes(c.id));
+  const { source } = useSource();
   const sort = search.sort ?? "start_ts";
   const dir = search.dir ?? "desc";
 
   const { data, error, isFetching } = useQuery({
-    queryKey: ["search", q, from, to, pageSize, page, tz, sort, dir, facets.join(",")],
-    queryFn: () => get(`/calls/search${qs({ q, from: from, to, tz, limit: pageSize, offset: page * pageSize, sort, dir, facets: facets.join(",") })}`),
+    queryKey: ["search", q, from, to, pageSize, page, tz, sort, dir, facets.join(","), source],
+    queryFn: () => get(`/calls/search${qs({ q, from: from, to, tz, limit: pageSize, offset: page * pageSize, sort, dir, facets: facets.join(","), source: source || undefined })}`),
     refetchInterval: to === "now" ? refreshMs : false,
     placeholderData: keepPreviousData,
   });
@@ -357,7 +359,7 @@ export function SearchPage() {
             <Select label="Row density" value={density} onChange={(v) => savePrefs({ density: v as "compact" | "comfortable" })} options={[{ value: "comfortable", label: "Comfortable" }, { value: "compact", label: "Compact" }]} />
             <Select label="Rows per page" value={String(pageSize)} onChange={(v) => { savePrefs({ searchPageSize: Number(v) }); setPage(0); }} options={[25, 50, 100, 200, 500].filter((n) => n <= settings.search_max_page_size).map((n) => ({ value: String(n), label: `${n} rows` }))} />
             {can("export_bulk") && (
-              <a className="inline-flex items-center gap-1.5 rounded-md px-2.5 h-7 text-[12.5px] font-medium bg-raised border border-line-2 hover:bg-sunken" href={`/api/v1/calls/export.csv${qs({ q, from: from, to, columns: csvColumns })}`} download>
+              <a className="inline-flex items-center gap-1.5 rounded-md px-2.5 h-7 text-[12.5px] font-medium bg-raised border border-line-2 hover:bg-sunken" href={`/api/v1/calls/export.csv${qs({ q, from: from, to, columns: csvColumns, source: source || undefined })}`} download>
                 <Download size={13} />CSV
               </a>
             )}

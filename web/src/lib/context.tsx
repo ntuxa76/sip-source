@@ -147,6 +147,16 @@ export function useRange() {
   return { from, to, setRange, defaultFrom: fallback };
 }
 
+/** The HEP source picked in the top bar, by address. Empty means every source. */
+export function useSource() {
+  const search = useSearch({ strict: false }) as { src?: string };
+  const navigate = useNavigate();
+  const setSource = useCallback((src: string) => {
+    navigate({ to: ".", search: (prev: any) => ({ ...prev, src: src || undefined }) } as any);
+  }, [navigate]);
+  return { source: search.src ?? "", setSource };
+}
+
 /** Absolute range boundary for the URL. ISO keeps links readable and unambiguous. */
 export function rangeParam(ms: number): string {
   return new Date(ms).toISOString();

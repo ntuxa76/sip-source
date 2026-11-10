@@ -10,12 +10,12 @@ import { compact, fmtHM, fmtHMS, fmtMonthDay, metricText, tzOffsetMs } from "../
 echarts.use([LineChart, BarChart, HeatmapChart, GridComponent, TooltipComponent, AxisPointerComponent, MarkAreaComponent, VisualMapComponent, CanvasRenderer]);
 
 // The validated categorical palette, one step per theme (CVD-checked in this order, light and
-// dark). Slots are assigned by value, never rank.
+// dark). It leads with the brand blue. Slots are assigned by value, never rank.
 const PALETTE = {
-  light: ["#6250d6", "#eb6834", "#2a78d6", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#e34948"],
-  dark: ["#9085e9", "#d95926", "#3987e5", "#199e70", "#c98500", "#d55181", "#008300", "#e66767"],
+  light: ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"],
+  dark: ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#008300", "#9085e9", "#e66767"],
 };
-const SLOT = { violet: 0, orange: 1, blue: 2, aqua: 3, yellow: 4, magenta: 5, green: 6, red: 7 };
+const SLOT = { blue: 0, orange: 1, aqua: 2, yellow: 3, magenta: 4, green: 5, violet: 6, red: 7 };
 
 const KNOWN_SLOTS: Record<string, number> = {};
 for (const group of [
@@ -453,7 +453,7 @@ export function HeatChart({ data, height, onClick }: { data: any; height: number
       grid: { left: 46, right: 10, top: 6, bottom: 20 },
       xAxis: { type: "category", data: data.buckets.map(String), axisTick: { show: false }, axisLine: { lineStyle: { color: c.axis } }, splitArea: { show: false }, axisLabel: { color: c.muted, fontSize: 11, interval: (i: number) => isTick(data.buckets[i]), formatter: (v: string) => label(Number(v)), hideOverlap: true } },
       yAxis: { type: "category", data: data.keys, axisTick: { show: false }, axisLine: { show: false }, axisLabel: { color: c.ink2, fontSize: 11, fontFamily: "'JetBrains Mono Variable', monospace" } },
-      visualMap: { show: false, min: 0, max, inRange: { color: theme === "dark" ? ["#241f3f", "#4a3fa6", "#9085e9", "#d9d4fa"] : ["#f0edfd", "#b5acf0", "#6250d6", "#2f2580"] } },
+      visualMap: { show: false, min: 0, max, inRange: { color: theme === "dark" ? ["#1a2c44", "#256abf", "#86b6ef", "#cde2fb"] : ["#e6f0fc", "#86b6ef", "#256abf", "#0d366b"] } },
       tooltip: {
         confine: true,
         ...tooltipChrome(c),

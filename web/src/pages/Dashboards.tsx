@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, Navigate, useNavigate, useSearch } from "@tanstack/react-router";
-import { Braces, ChevronDown, Copy, Download, FileUp, History, Maximize2, Pencil, Plus, RotateCcw, Save, Settings2, Trash2, X } from "lucide-react";
+import { Braces, ChevronDown, Copy, Download, FileUp, History, Maximize2, Pencil, Plus, Radio, RotateCcw, Save, Settings2, Trash2, X } from "lucide-react";
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 import GridLayout, { useContainerWidth } from "react-grid-layout";
 import { PanelView, TimePanelForExplore } from "../components/Panel";
@@ -427,7 +427,68 @@ export function HomePage() {
     if (can("subscribers_view")) return <Navigate to="/subscribers" />;
     return <Navigate to="/preferences" />;
   }
-  return <DashboardView key={settings.home_dashboard} id={settings.home_dashboard} />;
+  return (
+    <>
+      <GettingStarted />
+      <DashboardView key={settings.home_dashboard} id={settings.home_dashboard} />
+    </>
+  );
+}
+
+/** Shown on Home until the first HEP packet arrives. */
+function GettingStarted() {
+  const { data } = useQuery({ queryKey: ["sources"], queryFn: () => get("/sources"), refetchInterval: 15_000 });
+  const [hidden, setHidden] = useState(() => {
+    try {
+      return localStorage.getItem("vp-onboarding-hidden") === "1";
+    } catch {
+      return false;
+    }
+  });
+  const [copied, setCopied] = useState(false);
+  if (!data || data.length > 0 || hidden) return null;
+  const host = window.location.hostname;
+  const conf = `[general]\nenabled=yes\ncapture_address=${host}:9060\ncapture_id=2001\nuuid_type=call-id`;
+  const hide = () => {
+    setHidden(true);
+    try {
+      localStorage.setItem("vp-onboarding-hidden", "1");
+    } catch {
+      // Hidden for this visit only.
+    }
+  };
+  return (
+    <section className="mb-5 rounded-xl border border-line bg-surface shadow-card overflow-hidden">
+      <div className="flex items-start gap-3 px-5 pt-4">
+        <span className="w-9 h-9 rounded-lg bg-accent-wash text-accent flex items-center justify-center shrink-0"><Radio size={17} aria-hidden /></span>
+        <div className="flex-1 min-w-0">
+          <h2 className="text-[15px] font-semibold tracking-tight">Connect your first SIP server</h2>
+          <p className="text-ink-2 mt-0.5">Calls, registrations and quality appear here as soon as a server sends HEP. Everything is stored on this server until you add a ClickHouse.</p>
+        </div>
+        <button type="button" onClick={hide} aria-label="Hide" title="Hide" className="p-1 rounded-lg text-ink-3 hover:bg-sunken"><X size={15} /></button>
+      </div>
+      <ol className="grid md:grid-cols-3 gap-4 px-5 py-4">
+        <li className="rounded-lg border border-line p-3.5">
+          <div className="text-[11px] font-semibold text-accent uppercase tracking-wide">Step 1</div>
+          <div className="font-medium mt-1">Send HEP to port 9060</div>
+          <p className="text-ink-2 text-[12.5px] mt-1">UDP or TCP, HEP version 2 or 3, to <span className="font-mono">{host}:9060</span>. Each sender appears under Sources by its address.</p>
+        </li>
+        <li className="rounded-lg border border-line p-3.5">
+          <div className="flex items-center justify-between">
+            <div className="text-[11px] font-semibold text-accent uppercase tracking-wide">Step 2 · Asterisk</div>
+            <button type="button" className="text-xs text-accent hover:underline" onClick={() => navigator.clipboard?.writeText(conf).then(() => setCopied(true))}>{copied ? "Copied" : "Copy"}</button>
+          </div>
+          <pre className="mt-1.5 rounded-md bg-sunken border border-line px-2.5 py-2 font-mono text-[11.5px] leading-5 overflow-x-auto">{conf}</pre>
+          <p className="text-ink-2 text-[12px] mt-1.5">In <span className="font-mono">hep.conf</span>, then load res_hep, res_hep_pjsip and res_hep_rtcp.</p>
+        </li>
+        <li className="rounded-lg border border-line p-3.5">
+          <div className="text-[11px] font-semibold text-accent uppercase tracking-wide">Step 3</div>
+          <div className="font-medium mt-1">Name your sources</div>
+          <p className="text-ink-2 text-[12.5px] mt-1">OpenSIPS, Kamailio, FreeSWITCH and heplify work the same way. Give each sender an alias under Admin, Sources, then pick it from the source menu at the top.</p>
+        </li>
+      </ol>
+    </section>
+  );
 }
 
 const VIZ = [

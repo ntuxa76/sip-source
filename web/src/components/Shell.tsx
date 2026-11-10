@@ -1,10 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, Outlet, useNavigate, useRouterState, useSearch } from "@tanstack/react-router";
-import { BarChart3, ChevronLeft, ChevronRight, Compass, Database, LayoutDashboard, LogOut, Moon, Radio, RefreshCw, Search, Settings, Sun, Users } from "lucide-react";
+import { BarChart3, Check, ChevronDown, ChevronLeft, ChevronRight, Compass, Database, LayoutDashboard, LogOut, Moon, Radio, RefreshCw, Search, Server, Settings, Sun, Users } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { get, post } from "../lib/api";
-import { rangeParam, resolveMs, usePrefs, useRange } from "../lib/context";
+import { rangeParam, resolveMs, usePrefs, useRange, useSource } from "../lib/context";
 import { fmtDateTime, tzOffsetMs } from "../lib/format";
 import { Button, Select } from "./ui";
 
@@ -13,7 +13,7 @@ const ADMIN_SECTIONS: [string, string][] = [
   ["roles_manage", "roles"],
   ["settings_manage", "settings"],
   ["storage_manage", "storage"],
-  ["system_view", "agents"],
+  ["system_view", "sources"],
   ["audit_read", "audit"],
 ];
 
@@ -40,18 +40,18 @@ function initials(name: string) {
 
 /** Capture health at a glance, for people who can see the agents page. */
 function CaptureCard() {
-  const { data } = useQuery({ queryKey: ["admin", "agents"], queryFn: () => get("/admin/agents"), refetchInterval: 30_000 });
+  const { data } = useQuery({ queryKey: ["admin", "sources"], queryFn: () => get("/admin/sources"), refetchInterval: 30_000 });
   if (!data) return null;
   const active = data.filter((a: any) => a.status !== "silent").length;
   return (
-    <Link to="/admin/$section" params={{ section: "agents" } as any} className="block mx-3 mb-2 rounded-xl border border-line bg-sunken/60 p-3 hover:border-line-2">
+    <Link to="/admin/$section" params={{ section: "sources" } as any} className="block mx-3 mb-2 rounded-xl border border-line bg-sunken/60 p-3 hover:border-line-2">
       <div className="flex items-center gap-2">
         <span className={`w-2 h-2 rounded-full ${active > 0 ? "bg-good" : "bg-ink-3"}`} aria-hidden />
         <span className="text-[12.5px] font-medium">Capture</span>
-        <span className="ml-auto text-[11.5px] text-ink-3 tnum">{active}/{data.length} agents</span>
+        <span className="ml-auto text-[11.5px] text-ink-3 tnum">{active}/{data.length} sources</span>
       </div>
       <p className="text-[11.5px] text-ink-3 mt-1 leading-snug">
-        {data.length === 0 ? "No HEP received yet. Point your SIP servers at port 9060." : active === data.length ? "All agents are sending." : `${data.length - active} agent${data.length - active === 1 ? " is" : "s are"} silent.`}
+        {data.length === 0 ? "No HEP received yet. Point your SIP servers at port 9060." : active === data.length ? "All sources are sending." : `${data.length - active} source${data.length - active === 1 ? " is" : "s are"} silent.`}
       </p>
     </Link>
   );
@@ -62,7 +62,7 @@ export function Shell() {
   const client = useQueryClient();
   const nav = useNav();
   const path = useRouterState({ select: (s) => s.location.pathname });
-  const search = useSearch({ strict: false }) as { from?: string; to?: string; kiosk?: string };
+  const search = useSearch({ strict: false }) as { from?: string; to?: string; src?: string; kiosk?: string };
   const storage = useQuery({ queryKey: ["active-storage"], queryFn: () => get("/storages/active"), staleTime: 30_000 });
   const logout = useMutation({ mutationFn: () => post("/auth/logout"), onSuccess: () => client.invalidateQueries() });
   const active = (to: string) => (to === "/" ? path === "/" : path.startsWith(to.split("/").slice(0, 2).join("/")));
@@ -80,10 +80,7 @@ export function Shell() {
     <div className="flex h-full">
       <aside className="w-[232px] shrink-0 bg-surface border-r border-line flex flex-col">
         <div className="h-[60px] flex items-center gap-2.5 px-4 shrink-0">
-          <svg width="28" height="28" viewBox="0 0 32 32" aria-hidden>
-            <rect width="32" height="32" rx="9" fill="var(--accent)" />
-            <path d="M8 9v14M16 9v14M24 9v14M8 13h16M24 19H8" stroke="white" strokeWidth="2.2" strokeLinecap="round" />
-          </svg>
+          <img src="/logo.png" alt="" width={30} height={30} className="shrink-0" />
           <span className="font-semibold text-[15px] tracking-tight truncate">{settings.app_name}</span>
         </div>
         <nav className="flex-1 px-3 pb-3 overflow-y-auto">
@@ -95,7 +92,7 @@ export function Shell() {
                   <Link
                     key={n.id}
                     to={n.to}
-                    search={{ from: search.from, to: search.to } as any}
+                    search={{ from: search.from, to: search.to, src: search.src } as any}
                     className={`flex items-center gap-2.5 px-2.5 h-9 rounded-lg ${active(n.to) ? "bg-sunken text-ink font-medium" : "text-ink-2 hover:bg-sunken hover:text-ink"}`}
                   >
                     <n.icon size={16} aria-hidden className={active(n.to) ? "text-ink" : "text-ink-3"} />
@@ -211,8 +208,64 @@ function TopBar() {
         )}
       </form>
       <div className="flex-1" />
+      <SourcePicker />
       <TimePicker />
     </header>
+  );
+}
+
+/** Which HEP sender to look at. Lists every source by alias, or by address when it has none. */
+function SourcePicker() {
+  const { can } = usePrefs();
+  const { source, setSource } = useSource();
+  const { data } = useQuery({ queryKey: ["sources"], queryFn: () => get("/sources"), refetchInterval: 30_000 });
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const click = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", click);
+    return () => document.removeEventListener("mousedown", click);
+  }, []);
+  const list: any[] = data ?? [];
+  const picked = list.find((x) => x.ip === source);
+  const dot = (status: string) => <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${status === "silent" ? "bg-ink-3" : "bg-good"}`} aria-hidden />;
+  return (
+    <div className="relative" ref={ref}>
+      <Button onClick={() => setOpen((v) => !v)} aria-expanded={open} aria-haspopup="listbox" title="Show one HEP source">
+        <Server size={14} className="text-ink-3" aria-hidden />
+        <span className="max-w-[160px] truncate">{source ? (picked?.label ?? source) : "All sources"}</span>
+        <ChevronDown size={13} className="text-ink-3" aria-hidden />
+      </Button>
+      {open && (
+        <div className="absolute z-30 right-0 mt-1.5 w-[280px] bg-raised border border-line rounded-xl shadow-lg p-1" role="listbox">
+          <button type="button" role="option" aria-selected={!source} onClick={() => { setSource(""); setOpen(false); }} className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-left hover:bg-sunken ${!source ? "font-medium" : ""}`}>
+            <span className="flex-1">All sources</span>
+            {!source && <Check size={14} className="text-accent" aria-hidden />}
+          </button>
+          {list.length > 0 && <div className="my-1 border-t border-line" />}
+          <div className="max-h-[300px] overflow-y-auto">
+            {list.map((x) => (
+              <button type="button" role="option" aria-selected={x.ip === source} key={x.ip} onClick={() => { setSource(x.ip); setOpen(false); }} className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-left hover:bg-sunken">
+                {dot(x.status)}
+                <span className="min-w-0 flex-1">
+                  <span className={`block truncate ${x.ip === source ? "font-medium" : ""}`}>{x.label}</span>
+                  {x.alias && <span className="block font-mono text-[11px] text-ink-3">{x.ip}</span>}
+                </span>
+                {x.ip === source && <Check size={14} className="text-accent shrink-0" aria-hidden />}
+              </button>
+            ))}
+          </div>
+          {list.length === 0 && <p className="px-2.5 py-2 text-xs text-ink-3">No HEP received yet. Sources appear here once your SIP servers send to port 9060.</p>}
+          {can("system_view") && (
+            <Link to="/admin/$section" params={{ section: "sources" } as any} onClick={() => setOpen(false)} className="block mt-1 border-t border-line px-2.5 pt-2 pb-1.5 text-xs text-accent hover:underline">
+              Name your sources
+            </Link>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 

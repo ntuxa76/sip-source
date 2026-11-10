@@ -181,6 +181,19 @@ const MIGRATIONS: &[(i32, &[&str])] = &[(
             last_seen DATETIME(6) NULL
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
     ],
+), (
+    3,
+    &[
+        "CREATE TABLE sources (
+            ip VARCHAR(64) PRIMARY KEY,
+            alias VARCHAR(128) NOT NULL DEFAULT '',
+            capture_id INT UNSIGNED NOT NULL DEFAULT 0,
+            last_seen DATETIME(6) NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+        "INSERT IGNORE INTO sources (ip, alias, capture_id, last_seen)
+            SELECT source_ip, IF(name LIKE 'capture-%', '', name), capture_id, last_seen FROM agents WHERE source_ip <> ''",
+        "DROP TABLE agents",
+    ],
 )];
 
 pub async fn migrate(pool: &MySqlPool) -> Result<(), sqlx::Error> {
@@ -230,7 +243,7 @@ async fn set_marker(pool: &MySqlPool, key: &str) -> Result<(), sqlx::Error> {
     Ok(())
 }
 
-/// Seeds roles and dashboards once. Later edits and deletes are respected.
+/// Seeds roles, dashboards and the Local file storage once. Later edits and deletes are respected.
 pub async fn seed(pool: &MySqlPool) -> Result<(), sqlx::Error> {
     if !marker(pool, "_seeded_roles").await? {
         for (name, description, perms, locked) in auth::built_in_roles() {
@@ -246,6 +259,15 @@ pub async fn seed(pool: &MySqlPool) -> Result<(), sqlx::Error> {
             insert_dashboard(pool, &d, "system").await?;
         }
         set_marker(pool, "_seeded_dashboards").await?;
+    }
+    // Captured data has somewhere to go from the first start. It is selected unless another
+    // storage already is.
+    if !marker(pool, "_seeded_local_storage").await? {
+        let active: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM storages WHERE active = 1").fetch_one(pool).await?;
+        sqlx::query("INSERT INTO storages (name, type, config, secret, active, built_in, created_at, updated_at) VALUES ('Local file', 'local', ?, '', ?, 1, ?, ?)")
+            .bind(serde_json::json!({"database": crate::storage::LOCAL_DATABASE}).to_string()).bind((active == 0) as i8).bind(utc_now()).bind(utc_now())
+            .execute(pool).await?;
+        set_marker(pool, "_seeded_local_storage").await?;
     }
     // Dashboards nobody edited pick up the panels that work on captured data.
     if !marker(pool, "_dashboards_v4").await? {

@@ -1,14 +1,14 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { ArrowDownRight, ArrowUpRight, Code2, Copy, Download, Pencil, Table2, Trash2, X } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, Code2, Copy, Download, Info, Loader2, Pencil, Table2, Trash2, X } from "lucide-react";
 import { useState } from "react";
-import { get, post, qs } from "../lib/api";
+import { ApiError, get, post, qs } from "../lib/api";
 import type { Call, MetricQuery, TimeSeriesResult } from "../lib/api";
-import { rangeParam, usePrefs, useRange } from "../lib/context";
+import { rangeParam, usePrefs, useRange, useSource } from "../lib/context";
 import type { PanelDef } from "../lib/dashboard";
 import { downloadBlob, fmtDateTime, fmtDuration, fmtHMS, formatMetric, metricText } from "../lib/format";
 import { BarList, HeatChart, Histogram, MiniBars, TimeChart } from "./charts";
-import { Card, Empty, ErrorNote, FindingBadge, Loading, MosCell, RegStatus, StatusChip } from "./ui";
+import { Card, Empty, FindingBadge, Loading, MosCell, RegStatus, StatusChip } from "./ui";
 
 export interface PanelContext {
   /** Set when the panel is saved on a dashboard, so a viewer can run its SQL without permission to write SQL. */
@@ -47,6 +47,8 @@ export function buildQuery(p: PanelDef, from: string, to: string, tz: string, ct
 }
 
 function useMetric(q: MetricQuery, enabled = true) {
+  const { source } = useSource();
+  if (source) q = { ...q, var_filter: [q.var_filter, `source:${source}`].filter(Boolean).join(" ") };
   const { refreshMs } = usePrefs();
   return useQuery({
     queryKey: ["metric", q],
@@ -151,6 +153,18 @@ function EditActions({ ctx }: { ctx: PanelContext }) {
   );
 }
 
+/** Why a panel has nothing to show, said quietly. A first start is not an error. */
+function PanelNote({ error }: { error: unknown }) {
+  const e = error as ApiError | Error;
+  const starting = e instanceof ApiError && e.status === 503 && /starting|few seconds/i.test(e.message);
+  return (
+    <div className="flex items-start gap-1.5 text-ink-3 text-xs px-4 py-3">
+      {starting ? <Loader2 size={13} className="animate-spin shrink-0 mt-px" aria-hidden /> : <Info size={13} className="shrink-0 mt-px" aria-hidden />}
+      <span className="line-clamp-3">{starting ? "Storage is starting. Data appears in a few seconds." : e.message}</span>
+    </div>
+  );
+}
+
 function PanelFrame({ panel, ctx, height, info, actions, children }: { panel: PanelDef; ctx: PanelContext; height: number; info?: string; actions?: React.ReactNode; children: React.ReactNode }) {
   return (
     <section className={`group/panel bg-surface border rounded-xl shadow-card flex flex-col overflow-hidden ${ctx.onEdit ? "border-line-2" : "border-line"}`} style={{ height }} title={panel.options.description}>
@@ -175,7 +189,8 @@ function StatPanel({ panel, ctx, height }: { panel: PanelDef; ctx: PanelContext;
   const { data, error } = useMetric(buildQuery(panel, from, to, tz, ctx, { compare: true, max_points: 40 }));
   const d = data as TimeSeriesResult | undefined;
   const unit = d?.metric.unit ?? "";
-  const f = d ? formatMetric(d.total, unit) : null;
+  // Before any traffic there is nothing to compare: show zero, not a gap.
+  const f = d ? formatMetric(d.total ?? 0, unit) : null;
   const delta = d && d.total !== null && d.previous !== null && d.previous !== 0 ? ((d.total - d.previous) / Math.abs(d.previous)) * 100 : null;
   const good = delta === null || !d || d.metric.better === "none" || Math.abs(delta) < 0.5 ? null : delta > 0 === (d.metric.better === "higher");
   const spark = d?.series.length ? d.buckets.map((_, i) => d.series[0].values[i]).slice(0, d.partial_from ?? undefined) : [];
@@ -190,7 +205,7 @@ function StatPanel({ panel, ctx, height }: { panel: PanelDef; ctx: PanelContext;
         <span className={`items-center gap-0.5 -my-1 ${ctx.onEdit ? "flex" : "hidden"}`}><EditActions ctx={ctx} /></span>
       </div>
       {error ? (
-        <div className="text-crit text-xs mt-1 line-clamp-2">{(error as Error).message}</div>
+        <div className="mt-1"><PanelNote error={error} /></div>
       ) : (
         <div className={tall ? "flex flex-col flex-1 min-h-0" : "flex items-end gap-3 flex-1 min-h-0"}>
           <div className={`min-w-0 ${tall ? "flex items-baseline gap-2.5 flex-wrap" : "flex-1"}`}>
@@ -253,13 +268,13 @@ function TimePanel({ panel, ctx, height }: { panel: PanelDef; ctx: PanelContext;
     >
       <div className="px-2 pb-2 h-full">
         {error ? (
-          <ErrorNote error={error} />
+          <PanelNote error={error} />
         ) : isLoading || !d ? (
           <Loading />
         ) : mode === "table" ? (
           <SeriesTable data={d} height={body} />
         ) : d.series.length === 0 ? (
-          <Empty>No data in range</Empty>
+          <Empty>No data yet</Empty>
         ) : (
           <TimeChart
             data={d}
@@ -334,7 +349,7 @@ function TopPanel({ panel, ctx, height }: { panel: PanelDef; ctx: PanelContext; 
   return (
     <PanelFrame panel={panel} ctx={ctx} height={height}>
       <div className="overflow-y-auto h-full">
-        {error ? <ErrorNote error={error} /> : !data ? <Loading /> : rows.length === 0 ? <Empty>No data in range</Empty> : (
+        {error ? <PanelNote error={error} /> : !data ? <Loading /> : rows.length === 0 ? <Empty>No data yet</Empty> : (
           <BarList
             rows={rows}
             unit={data.metric.unit}
@@ -353,7 +368,7 @@ function TablePanel({ panel, ctx, height }: { panel: PanelDef; ctx: PanelContext
   return (
     <PanelFrame panel={panel} ctx={ctx} height={height}>
       <div className="overflow-auto h-full">
-        {error ? <ErrorNote error={error} /> : !data ? <Loading /> : (
+        {error ? <PanelNote error={error} /> : !data ? <Loading /> : (
           <table className="data-table">
             <thead>
               <tr>
@@ -388,7 +403,7 @@ function HeatPanel({ panel, ctx, height }: { panel: PanelDef; ctx: PanelContext;
   return (
     <PanelFrame panel={panel} ctx={ctx} height={height} info={data ? `${data.interval_label} · ${data.tz}` : undefined}>
       <div className="px-2 pb-2 h-full">
-        {error ? <ErrorNote error={error} /> : !data ? <Loading /> : (
+        {error ? <PanelNote error={error} /> : !data ? <Loading /> : (
           <HeatChart data={data} height={height - 46} onClick={ctx.editing ? undefined : (a, b, key) => navigate({ to: "/search", search: { from: rangeParam(a), to: rangeParam(b), q: `status:${key}` } } as any)} />
         )}
       </div>
@@ -403,7 +418,7 @@ function HistogramPanel({ panel, ctx, height }: { panel: PanelDef; ctx: PanelCon
   return (
     <PanelFrame panel={panel} ctx={ctx} height={height}>
       <div className="px-2 pb-2 h-full">
-        {error ? <ErrorNote error={error} /> : !data ? <Loading /> : <Histogram bins={data.bins} unit={data.metric.unit} height={height - 46} />}
+        {error ? <PanelNote error={error} /> : !data ? <Loading /> : <Histogram bins={data.bins} unit={data.metric.unit} height={height - 46} />}
       </div>
     </PanelFrame>
   );
@@ -423,7 +438,7 @@ function CallsPanel({ panel, ctx, height }: { panel: PanelDef; ctx: PanelContext
   return (
     <PanelFrame panel={panel} ctx={ctx} height={height} info={data ? `${data.total.toLocaleString()} calls` : undefined}>
       <div className="h-full overflow-auto">
-        {!can("search_all") ? <Empty>Your account can't browse calls.</Empty> : error ? <ErrorNote error={error} /> : !data ? <Loading /> : data.rows.length === 0 ? <Empty>No calls in range</Empty> : (
+        {!can("search_all") ? <Empty>Your account can't browse calls.</Empty> : error ? <PanelNote error={error} /> : !data ? <Loading /> : data.rows.length === 0 ? <Empty>No calls in range</Empty> : (
           <table className="data-table text-xs">
             <thead>
               <tr><th>Time</th><th>Caller</th><th>Callee</th><th>Trunk</th><th>Status</th><th className="num">Talk</th><th className="num">MOS</th><th>Findings</th></tr>
@@ -455,7 +470,7 @@ function FailingAorsPanel({ panel, ctx, height }: { panel: PanelDef; ctx: PanelC
   return (
     <PanelFrame panel={panel} ctx={ctx} height={height}>
       <div className="h-full overflow-auto">
-        {error ? <ErrorNote error={error} /> : !data ? <Loading /> : (
+        {error ? <PanelNote error={error} /> : !data ? <Loading /> : (
           <table className="data-table text-xs">
             <thead><tr><th>Number</th><th>State</th><th>Last failure</th><th className="num">Failures</th><th>Handset</th></tr></thead>
             <tbody>

@@ -1,5 +1,5 @@
-# voip-panel with its own MariaDB. ClickHouse is your existing server: connect it
-# under Admin -> Storage after the first login.
+# sip-source with its own MariaDB. Captured data is kept in the sip-source-data volume
+# until you add a ClickHouse server under Admin -> Storage.
 #
 #   cp .env.compose.example .env      # then set the passwords
 #   docker compose up -d
@@ -22,8 +22,8 @@ services:
       timeout: 5s
       retries: 30
 
-  voip-panel:
-    image: ntuxa76/sip-source:0.2
+  sip-source:
+    image: ntuxa76/sip-source:0.3
     restart: unless-stopped
     depends_on:
       mariadb:
@@ -37,6 +37,8 @@ services:
       # Add any other VP_* variable here, for example:
       # VP_DEFAULT_TZ: Asia/Baghdad
       # VP_HEP_AUTH_KEY: change-me
+    volumes:
+      - sip-source-data:/data
     ports:
       - "${VP_PORT:-8080}:8080"
       - "${VP_HEP_PORT:-9060}:9060/udp"
@@ -44,3 +46,4 @@ services:
 
 volumes:
   mariadb-data:
+  sip-source-data:

@@ -1,4 +1,5 @@
-//! Capture-data storages. Connections are chosen in the UI and kept in MariaDB, and one is active.
+//! Capture-data storages: the built-in Local file storage, or ClickHouse servers added in the UI.
+//! Connections are kept in MariaDB, and one is active.
 
 use crate::api::{App, problem};
 use crate::auth::{User, db_error, is_duplicate};
@@ -18,6 +19,7 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use sqlx::Row;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 
 type S = State<Arc<App>>;
 
@@ -65,20 +67,61 @@ fn clickhouse_from(a: &App, config: &Value, secret: &str) -> Result<Ch, String> 
     )
 }
 
-/// Reloads the active storage into memory. Called at startup and after any storage change.
-pub async fn refresh(a: &App) -> Result<(), sqlx::Error> {
+/// A storage row as a client: a ClickHouse server, or the local engine, started on demand.
+async fn connect(a: &App, kind: &str, config: &Value, secret: &str) -> Result<Ch, String> {
+    match kind {
+        "local" => {
+            a.local.start().await?;
+            a.local.client(config["database"].as_str().unwrap_or(LOCAL_DATABASE))
+        }
+        "clickhouse" => clickhouse_from(a, config, secret),
+        other => Err(format!("Unknown storage type {other}.")),
+    }
+}
+
+pub const LOCAL_DATABASE: &str = "sip_source";
+
+/// Reloads the active storage. Called at startup and after any storage change. The local engine
+/// starts in the background; until it answers, the API reports that storage is starting.
+pub async fn refresh(a: &Arc<App>) -> Result<(), sqlx::Error> {
     let row = sqlx::query("SELECT type, config, secret FROM storages WHERE active = 1 LIMIT 1").fetch_optional(&a.db).await?;
-    let active = row.and_then(|r| {
-        let config: Value = serde_json::from_str(&r.get::<String, _>("config")).unwrap_or_else(|_| json!({}));
-        match clickhouse_from(a, &config, &r.get::<String, _>("secret")) {
-            Ok(c) => Some(c),
-            Err(e) => {
-                tracing::error!("the selected storage is unusable: {e}");
-                None
+    let generation = a.storage_generation.fetch_add(1, Ordering::SeqCst) + 1;
+    let current = move |app: &App| app.storage_generation.load(Ordering::SeqCst) == generation;
+    let Some(r) = row else {
+        a.local.stop().await;
+        *a.storage.write().unwrap() = None;
+        a.storage_starting.store(false, Ordering::SeqCst);
+        return Ok(());
+    };
+    let kind: String = r.get("type");
+    let config: Value = serde_json::from_str(&r.get::<String, _>("config")).unwrap_or_else(|_| json!({}));
+    let secret: String = r.get("secret");
+    if kind != "local" {
+        a.local.stop().await;
+    }
+    *a.storage.write().unwrap() = None;
+    a.storage_starting.store(true, Ordering::SeqCst);
+    let app = a.clone();
+    tokio::spawn(async move {
+        // Retries until the storage answers and has the current schema, unless another storage
+        // has been selected in the meantime.
+        while current(&app) {
+            let prepared = match connect(&app, &kind, &config, &secret).await {
+                Ok(c) => ch::init_schema(&c, &retention(&app)).await.map(|_| c),
+                Err(e) => Err(e),
+            };
+            match prepared {
+                Ok(c) if current(&app) => {
+                    *app.storage.write().unwrap() = Some(c);
+                    app.storage_starting.store(false, Ordering::SeqCst);
+                    return;
+                }
+                Ok(_) => return,
+                Err(e) => tracing::warn!("storage is not ready: {e}"),
             }
+            tokio::time::sleep(std::time::Duration::from_secs(10)).await;
         }
     });
-    *a.storage.write().unwrap() = active;
     Ok(())
 }
 
@@ -91,21 +134,6 @@ fn retention(a: &App) -> ch::Retention {
         logs: s.int("retention_logs_days"),
         calls: s.int("retention_calls_days"),
         metrics: s.int("retention_metrics_days"),
-    }
-}
-
-/// Brings the selected ClickHouse up to the current schema, waiting for it if it isn't reachable.
-pub async fn prepare_active(a: Arc<App>) {
-    loop {
-        let current = a.storage.read().unwrap().clone();
-        let Some(c) = current else { return };
-        match ch::init_schema(&c, &retention(&a)).await {
-            Ok(()) => return,
-            Err(e) => {
-                tracing::warn!("ClickHouse is not ready: {e}");
-                tokio::time::sleep(std::time::Duration::from_secs(10)).await;
-            }
-        }
     }
 }
 
@@ -151,16 +179,19 @@ pub struct Body {
     password: Option<String>,
 }
 
-fn check_type(kind: &str) -> Result<(), Response> {
-    if kind == "clickhouse" {
-        Ok(())
-    } else {
-        Err(problem(StatusCode::BAD_REQUEST, "Unsupported storage type", "Only ClickHouse storages can be added."))
+fn check_type(kind: &str, config: &Value) -> Result<(), Response> {
+    let database = config["database"].as_str().unwrap_or("");
+    if !database.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+        return Err(problem(StatusCode::BAD_REQUEST, "Bad database name", "Use letters, digits and underscores only."));
+    }
+    match kind {
+        "clickhouse" | "local" => Ok(()),
+        _ => Err(problem(StatusCode::BAD_REQUEST, "Unsupported storage type", "Choose Local file or ClickHouse server.")),
     }
 }
 
 pub async fn create(State(a): S, user: User, Json(b): Json<Body>) -> Response {
-    if let Err(r) = user.need("storage_manage").and_then(|_| check_type(&b.kind)) {
+    if let Err(r) = user.need("storage_manage").and_then(|_| check_type(&b.kind, &b.config)) {
         return r;
     }
     let secret = seal(&a, b.password.as_deref().unwrap_or(""));
@@ -177,7 +208,7 @@ pub async fn create(State(a): S, user: User, Json(b): Json<Body>) -> Response {
 }
 
 pub async fn update(State(a): S, user: User, Path(id): Path<i64>, Json(b): Json<Body>) -> Response {
-    if let Err(r) = user.need("storage_manage").and_then(|_| check_type(&b.kind)) {
+    if let Err(r) = user.need("storage_manage").and_then(|_| check_type(&b.kind, &b.config)) {
         return r;
     }
     // Leaving the password blank keeps the stored one.
@@ -190,7 +221,6 @@ pub async fn update(State(a): S, user: User, Path(id): Path<i64>, Json(b): Json<
             if let Err(e) = refresh(&a).await {
                 return db_error(e);
             }
-            tokio::spawn(prepare_active(a.clone()));
             db::audit(&a.db, &user.username, &user.ip, "storage.update", b.name.trim(), "success", "notice", "");
             Json(json!({"ok": true})).into_response()
         }
@@ -203,11 +233,14 @@ pub async fn remove(State(a): S, user: User, Path(id): Path<i64>) -> Response {
     if let Err(r) = user.need("storage_manage") {
         return r;
     }
-    let row = match sqlx::query("SELECT name, active FROM storages WHERE id = ?").bind(id).fetch_optional(&a.db).await {
+    let row = match sqlx::query("SELECT name, active, built_in FROM storages WHERE id = ?").bind(id).fetch_optional(&a.db).await {
         Ok(Some(r)) => r,
         Ok(None) => return problem(StatusCode::NOT_FOUND, "Not found", "No such storage."),
         Err(e) => return db_error(e),
     };
+    if row.get::<i8, _>("built_in") != 0 {
+        return problem(StatusCode::FORBIDDEN, "Built in", "The built-in Local file storage can't be removed.");
+    }
     if row.get::<i8, _>("active") != 0 {
         return problem(StatusCode::CONFLICT, "In use", "Select another storage first.");
     }
@@ -230,7 +263,9 @@ pub async fn test(State(a): S, user: User, Path(id): Path<i64>) -> Response {
         Err(e) => return db_error(e),
     };
     let config: Value = serde_json::from_str(&row.get::<String, _>("config")).unwrap_or_else(|_| json!({}));
-    let result = match clickhouse_from(&a, &config, &row.get::<String, _>("secret")) {
+    let kind: String = row.get("type");
+    let result = match connect(&a, &kind, &config, &row.get::<String, _>("secret")).await {
+        Ok(c) if kind == "local" => c.version().await.map(|v| format!("Working. Built-in engine {v}, data in {}", a.boot.data_dir)),
         Ok(c) => c.version().await.map(|v| format!("Connected. ClickHouse {v}")),
         Err(e) => Err(e),
     };
@@ -247,7 +282,7 @@ pub async fn activate(State(a): S, user: User, Path(id): Path<i64>) -> Response 
     if let Err(r) = user.need("storage_manage") {
         return r;
     }
-    let row = match sqlx::query("SELECT name, config, secret FROM storages WHERE id = ?").bind(id).fetch_optional(&a.db).await {
+    let row = match sqlx::query("SELECT name, type, config, secret FROM storages WHERE id = ?").bind(id).fetch_optional(&a.db).await {
         Ok(Some(r)) => r,
         Ok(None) => return problem(StatusCode::NOT_FOUND, "Not found", "No such storage."),
         Err(e) => return db_error(e),
@@ -255,12 +290,12 @@ pub async fn activate(State(a): S, user: User, Path(id): Path<i64>) -> Response 
     let name: String = row.get("name");
     let config: Value = serde_json::from_str(&row.get::<String, _>("config")).unwrap_or_else(|_| json!({}));
     // The tables must exist before capture starts writing here.
-    let prepared = match clickhouse_from(&a, &config, &row.get::<String, _>("secret")) {
+    let prepared = match connect(&a, &row.get::<String, _>("type"), &config, &row.get::<String, _>("secret")).await {
         Ok(c) => ch::init_schema(&c, &retention(&a)).await,
         Err(e) => Err(e),
     };
     if let Err(e) = prepared {
-        return problem(StatusCode::UNPROCESSABLE_ENTITY, "Could not prepare ClickHouse", &e);
+        return problem(StatusCode::UNPROCESSABLE_ENTITY, "Could not prepare this storage", &e);
     }
     let mut tx = match a.db.begin().await {
         Ok(t) => t,

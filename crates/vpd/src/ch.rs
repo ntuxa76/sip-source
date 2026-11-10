@@ -140,6 +140,16 @@ pub async fn init_schema(ch: &Ch, r: &Retention) -> Result<(), String> {
     ] {
         ch.exec(&format!("ALTER TABLE {table} MODIFY TTL toDateTime({column}) + INTERVAL {days} DAY"), true).await?;
     }
+    // Columns added after the first release.
+    for (table, column) in [
+        ("sip_messages", "agent_ip LowCardinality(String) AFTER capture_point"),
+        ("registration_events", "agent_ip LowCardinality(String) AFTER capture_id"),
+        ("qos_reports", "agent_ip LowCardinality(String) AFTER capture_point"),
+        ("logs", "agent_ip LowCardinality(String) AFTER capture_id"),
+        ("calls", "agent_ips Array(LowCardinality(String)) AFTER capture_points"),
+    ] {
+        ch.exec(&format!("ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column}"), true).await?;
+    }
     for view in views() {
         ch.exec(&view, true).await?;
     }
@@ -154,6 +164,7 @@ fn tables(r: &Retention) -> Vec<String> {
             kind LowCardinality(String),
             capture_id UInt32,
             capture_point LowCardinality(String),
+            agent_ip LowCardinality(String),
             src_ip String, src_port UInt16, dst_ip String, dst_port UInt16,
             transport LowCardinality(String),
             call_id String,
@@ -194,6 +205,7 @@ fn tables(r: &Retention) -> Vec<String> {
             rrd_ms Nullable(UInt32),
             node LowCardinality(String),
             capture_id UInt32,
+            agent_ip LowCardinality(String),
             nat Bool,
             challenged Bool
         ) ENGINE = MergeTree PARTITION BY toYYYYMMDD(ts) ORDER BY (aor, ts)
@@ -212,7 +224,7 @@ fn tables(r: &Retention) -> Vec<String> {
             ingress_group LowCardinality(String), egress_group LowCardinality(String),
             trunk LowCardinality(String), node LowCardinality(String), pbx LowCardinality(String),
             backend LowCardinality(String),
-            capture_ids Array(UInt32), capture_points Array(LowCardinality(String)),
+            capture_ids Array(UInt32), capture_points Array(LowCardinality(String)), agent_ips Array(LowCardinality(String)),
             media_node LowCardinality(String),
             final_status UInt16, final_reason LowCardinality(String), egress_status UInt16,
             q850_cause UInt8, end_cause LowCardinality(String), hangup_side LowCardinality(String),
@@ -236,6 +248,7 @@ fn tables(r: &Retention) -> Vec<String> {
             call_id String,
             capture_id UInt32,
             capture_point LowCardinality(String),
+            agent_ip LowCardinality(String),
             source LowCardinality(String),
             ssrc String,
             src_ip String, dst_ip String,
@@ -249,6 +262,7 @@ fn tables(r: &Retention) -> Vec<String> {
             ts DateTime64(6, 'UTC') CODEC(Delta, ZSTD(1)),
             call_id String,
             capture_id UInt32,
+            agent_ip LowCardinality(String),
             node LowCardinality(String),
             severity LowCardinality(String),
             message String CODEC(ZSTD(3))

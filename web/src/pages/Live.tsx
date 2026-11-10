@@ -4,7 +4,7 @@ import { Pause, Play, Square, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Badge, Button, Card, Empty, PageHeader } from "../components/ui";
 import { put } from "../lib/api";
-import { usePrefs } from "../lib/context";
+import { usePrefs, useSource } from "../lib/context";
 import { fmtMicros, usOf } from "../lib/format";
 
 interface LiveEvent {
@@ -21,6 +21,7 @@ interface LiveEvent {
   node: string;
   ua: string;
   capture_id: number;
+  agent_ip: string;
 }
 
 interface Dialog {
@@ -43,6 +44,9 @@ export function LivePage() {
   const [paused, setPaused] = useState(false);
   const pausedRef = useRef(false);
   pausedRef.current = paused;
+  const { source } = useSource();
+  const sourceRef = useRef(source);
+  sourceRef.current = source;
   const [dialogs, setDialogs] = useState<Dialog[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [filter, setFilter] = useState("");
@@ -71,7 +75,7 @@ export function LivePage() {
     };
     es.onmessage = (e) => {
       if (pausedRef.current) return;
-      const events: LiveEvent[] = JSON.parse(e.data);
+      const events: LiveEvent[] = (JSON.parse(e.data) as LiveEvent[]).filter((ev) => !sourceRef.current || ev.agent_ip === sourceRef.current);
       if (events.length === 0) return;
       setDialogs((prev) => {
         const map = new Map(prev.map((d) => [d.id, d]));

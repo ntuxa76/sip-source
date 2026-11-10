@@ -30,7 +30,7 @@ use sqlx::Row;
 use sqlx::mysql::MySqlPool;
 use std::collections::HashMap;
 use std::convert::Infallible;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 use tokio::sync::broadcast::error::TryRecvError;
@@ -44,6 +44,11 @@ pub struct App {
     pub settings: Settings,
     pub db: MySqlPool,
     pub storage: RwLock<Option<Ch>>,
+    /// The selected storage is being started or prepared.
+    pub storage_starting: AtomicBool,
+    /// Bumped on every storage change, so a slow start can't overwrite a newer choice.
+    pub storage_generation: AtomicU64,
+    pub local: crate::local::Engine,
     pub ingest: Ingest,
     pub live_sessions: AtomicUsize,
 }
@@ -63,7 +68,13 @@ impl App {
 
     /// The selected ClickHouse, or a response that tells the user to select one.
     fn ch(&self) -> Result<Ch, Response> {
-        self.storage.read().unwrap().clone().ok_or_else(|| problem(StatusCode::SERVICE_UNAVAILABLE, "No storage selected", "Add a ClickHouse connection on the Storage page and select it."))
+        self.storage.read().unwrap().clone().ok_or_else(|| {
+            if self.storage_starting.load(Ordering::SeqCst) {
+                problem(StatusCode::SERVICE_UNAVAILABLE, "Storage is starting", "Data appears in a few seconds.")
+            } else {
+                problem(StatusCode::SERVICE_UNAVAILABLE, "No storage selected", "Select a storage on the Storage page.")
+            }
+        })
     }
 }
 
@@ -155,7 +166,8 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/queries/run", post(run_query))
         .route("/admin/audit", get(audit_log))
         .route("/admin/normalize-test", post(normalize_test))
-        .route("/admin/agents/{id}", put(agent_rename))
+        .route("/sources", get(sources_list))
+        .route("/admin/sources/{ip}", put(source_alias))
         .route("/admin/{section}", get(admin_section))
         .fallback(|| async { not_found("No such API route") })
         .layer(middleware::from_fn(csrf));
@@ -276,9 +288,18 @@ async fn field_values(State(a): S, user: User, Path(field): Path<String>) -> Res
         return r;
     }
     if field == "capture" {
-        let mut list: Vec<(u32, String)> = a.ingest.agents.read().unwrap().values().map(|x| (x.id, x.name.clone())).collect();
+        let mut ids: HashMap<u32, Vec<String>> = HashMap::new();
+        for x in a.ingest.agents.read().unwrap().values() {
+            ids.entry(x.capture_id).or_default().push(x.label());
+        }
+        let mut list: Vec<(u32, Vec<String>)> = ids.into_iter().collect();
         list.sort();
-        return Json(json!(list.iter().map(|(id, name)| json!({"value": id.to_string(), "label": format!("{id} · {name}")})).collect::<Vec<_>>())).into_response();
+        return Json(json!(list.iter().map(|(id, names)| json!({"value": id.to_string(), "label": format!("{id} · {}", names.join(", "))})).collect::<Vec<_>>())).into_response();
+    }
+    if field == "source" {
+        let mut list: Vec<(String, String)> = a.ingest.agents.read().unwrap().values().map(|x| (x.ip.clone(), x.label())).collect();
+        list.sort();
+        return Json(json!(list.iter().map(|(ip, label)| json!({"value": ip, "label": if label == ip { ip.clone() } else { format!("{label} · {ip}") }})).collect::<Vec<_>>())).into_response();
     }
     let Some(expr) = search::facet_expr(&field) else { return Json(json!([])).into_response() };
     let ch = match a.ch() {
@@ -306,6 +327,18 @@ struct SearchParams {
     dir: Option<String>,
     facets: Option<String>,
     columns: Option<String>,
+    /// The source picked in the top bar.
+    source: Option<String>,
+}
+
+/// The search conditions plus the source picked in the top bar.
+fn with_source(tokens: &[search::Token], source: Option<&str>) -> String {
+    let mut filter = search::to_sql(tokens);
+    if let Some(ip) = source.filter(|s| !s.is_empty()) {
+        let cond = format!("has(agent_ips, {})", sql::quote(ip));
+        filter = if filter.is_empty() { cond } else { format!("{filter} AND {cond}") };
+    }
+    filter
 }
 
 fn mask_text(s: &str, keep: usize) -> String {
@@ -386,7 +419,7 @@ async fn call_search(State(a): S, user: User, Query(p): Query<SearchParams>) -> 
     }
     let tz = parse_tz(p.tz.as_deref());
     let opts = a.opts();
-    let cond = time_condition(from, to, &search::to_sql(&tokens));
+    let cond = time_condition(from, to, &with_source(&tokens, p.source.as_deref()));
 
     let offset = p.offset.unwrap_or(0);
     let limit = p.limit.unwrap_or(a.settings.int("search_page_size") as usize).clamp(1, a.settings.int("search_max_page_size") as usize);
@@ -419,12 +452,19 @@ async fn call_search(State(a): S, user: User, Query(p): Query<SearchParams>) -> 
         }
     }
 
-    let agents: HashMap<u32, String> = a.ingest.agents.read().unwrap().values().map(|x| (x.id, x.name.clone())).collect();
+    let (captures, sources): (HashMap<u32, String>, HashMap<String, String>) = {
+        let agents = a.ingest.agents.read().unwrap();
+        (agents.values().map(|x| (x.capture_id, x.label())).collect(), agents.values().map(|x| (x.ip.clone(), x.label())).collect())
+    };
     let mut facet_json = serde_json::Map::new();
     for (name, result) in requested.iter().zip(facets) {
         let list: Vec<Value> = result.unwrap_or_default().iter().map(|r| {
             let key = r["k"].as_str().unwrap_or("");
-            let label = (*name == "capture").then(|| key.parse().ok().and_then(|id: u32| agents.get(&id)).map(|n| format!("{key} · {n}"))).flatten();
+            let label = match *name {
+                "capture" => key.parse().ok().and_then(|id: u32| captures.get(&id)).map(|n| format!("{key} · {n}")),
+                "source" => sources.get(key).filter(|n| *n != key).cloned(),
+                _ => None,
+            };
             json!({"value": key, "count": r["c"], "label": label.unwrap_or_else(|| key.to_string())})
         }).collect();
         facet_json.insert(name.to_string(), json!(list));
@@ -480,7 +520,7 @@ async fn export_csv(State(a): S, user: User, Query(p): Query<SearchParams>) -> R
     }
     let default_columns = "start_ts,caller_n,callee_n,direction,trunk,final_status,pdd_ms,talk_ms,min_mos,findings";
     let columns: Vec<&str> = p.columns.as_deref().unwrap_or(default_columns).split(',').filter(|c| sql::CALL_COLUMNS.iter().any(|d| d.0 == *c)).collect();
-    let cond = time_condition(from, to, &search::to_sql(&tokens));
+    let cond = time_condition(from, to, &with_source(&tokens, p.source.as_deref()));
     let rows = match ch.select(&format!("SELECT {CALL_SELECT} FROM v_calls WHERE {cond} ORDER BY start_ts DESC LIMIT {}", a.settings.int("export_max_rows"))).await {
         Ok(r) => r,
         Err(e) => return query_failed(e),
@@ -979,18 +1019,29 @@ async fn run_query(State(a): S, user: User, Json(b): Json<SqlBody>) -> Response 
     }
 }
 
+fn source_status(x: &crate::ingest::AgentStats, now: i64) -> &'static str {
+    match x.last_seen.map(|t| now - t.0) {
+        Some(i) if i < 2 * MIN && x.clock_offset_ms.abs() > 1000.0 => "clock skew",
+        Some(i) if i < 2 * MIN => "active",
+        _ => "silent",
+    }
+}
+
 fn agents_json(a: &App, now: i64) -> Value {
     let mut rows: Vec<crate::ingest::AgentStats> = a.ingest.agents.read().unwrap().values().cloned().collect();
-    rows.sort_by_key(|x| x.id);
-    json!(rows.iter().map(|x| {
-        let idle = x.last_seen.map(|t| now - t.0);
-        let status = match idle {
-            Some(i) if i < 2 * MIN && x.clock_offset_ms.abs() > 1000.0 => "clock skew",
-            Some(i) if i < 2 * MIN => "active",
-            _ => "silent",
-        };
-        json!({"id": x.id, "name": x.name, "host": x.source_ip, "hep_version": x.hep_version, "packets": x.packets, "bytes": x.bytes, "errors": x.errors, "offset_ms": x.clock_offset_ms.round(), "last_seen": x.last_seen, "status": status})
-    }).collect::<Vec<_>>())
+    rows.sort_by(|x, y| x.ip.cmp(&y.ip));
+    json!(rows.iter().map(|x| json!({
+        "ip": x.ip, "alias": x.alias, "label": x.label(), "capture_id": x.capture_id, "hep_version": x.hep_version, "packets": x.packets, "bytes": x.bytes,
+        "errors": x.errors, "offset_ms": x.clock_offset_ms.round(), "last_seen": x.last_seen, "status": source_status(x, now),
+    })).collect::<Vec<_>>())
+}
+
+/// The HEP senders, for the source picker in the top bar.
+async fn sources_list(State(a): S, _user: User) -> Json<Value> {
+    let now = now_us();
+    let mut rows: Vec<crate::ingest::AgentStats> = a.ingest.agents.read().unwrap().values().cloned().collect();
+    rows.sort_by(|x, y| x.label().to_lowercase().cmp(&y.label().to_lowercase()));
+    Json(json!(rows.iter().map(|x| json!({"ip": x.ip, "alias": x.alias, "label": x.label(), "capture_id": x.capture_id, "status": source_status(x, now)})).collect::<Vec<_>>()))
 }
 
 async fn system_json(a: &App) -> Value {
@@ -1020,37 +1071,40 @@ async fn admin_section(State(a): S, user: User, Path(section): Path<String>) -> 
         return r;
     }
     match section.as_str() {
-        "agents" => Json(agents_json(&a, now_us())).into_response(),
+        "sources" | "agents" => Json(agents_json(&a, now_us())).into_response(),
         "system" => Json(system_json(&a).await).into_response(),
         _ => not_found("No such section"),
     }
 }
 
 #[derive(Deserialize)]
-struct AgentBody {
-    name: String,
+struct AliasBody {
+    alias: String,
 }
 
-async fn agent_rename(State(a): S, user: User, Path(id): Path<u32>, Json(b): Json<AgentBody>) -> Response {
+/// Names a source. An empty alias goes back to showing the address.
+async fn source_alias(State(a): S, user: User, Path(ip): Path<String>, Json(b): Json<AliasBody>) -> Response {
     if let Err(r) = user.need("settings_manage") {
         return r;
     }
-    let name = b.name.trim();
-    if name.is_empty() || name.len() > 96 {
-        return problem(StatusCode::BAD_REQUEST, "Bad name", "Enter a name of up to 96 characters.");
+    let alias = b.alias.trim();
+    if alias.chars().count() > 96 {
+        return problem(StatusCode::BAD_REQUEST, "Too long", "Use up to 96 characters.");
     }
-    match sqlx::query("UPDATE agents SET name = ? WHERE capture_id = ?").bind(name).bind(id).execute(&a.db).await {
+    if !a.ingest.agents.read().unwrap().contains_key(&ip) {
+        return not_found("No source with this address");
+    }
+    match sqlx::query("INSERT INTO sources (ip, alias) VALUES (?, ?) ON DUPLICATE KEY UPDATE alias = VALUES(alias)").bind(&ip).bind(alias).execute(&a.db).await {
         Ok(_) => {
-            if let Some(agent) = a.ingest.agents.write().unwrap().get_mut(&id) {
-                agent.name = name.to_string();
+            if let Some(source) = a.ingest.agents.write().unwrap().get_mut(&ip) {
+                source.alias = alias.to_string();
             }
-            db::audit(&a.db, &user.username, &user.ip, "agent.rename", &id.to_string(), "success", "notice", name);
+            db::audit(&a.db, &user.username, &user.ip, "source.alias", &ip, "success", "notice", alias);
             Json(json!({"ok": true})).into_response()
         }
         Err(e) => db_error(e),
     }
 }
-
 
 async fn audit_log(State(a): S, user: User) -> Response {
     if let Err(r) = user.need("audit_read") {

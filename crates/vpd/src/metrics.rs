@@ -242,6 +242,7 @@ pub fn generated_sql(m: &M, q: &Query, shape: &str) -> String {
     }
     let mut conds: Vec<String> = Vec::new();
     let mut series = q.group_by.as_deref().map(str::to_string);
+    let occupancy: String;
     let (table, time_col) = match m.family {
         "calls" => {
             let findings = m.id == "findings";
@@ -259,7 +260,15 @@ pub fn generated_sql(m: &M, q: &Query, shape: &str) -> String {
         }
         "occupancy" => {
             series = series.filter(|d| matches!(d.as_str(), "direction" | "trunk"));
-            ("v_kpi_concurrency_1m", "bucket")
+            // One row per answered call per minute it was up, built from the calls themselves so
+            // the dashboard's filters and the picked source apply. Calls are looked for from a
+            // day before the range, which covers all but the longest.
+            let filter = search::to_sql(&search::parse(q.filter.as_deref().unwrap_or("")));
+            let extra = if filter.is_empty() { String::new() } else { format!(" AND {filter}") };
+            occupancy = format!(
+                "(SELECT toDateTime(arrayJoin(range(toUInt32(toStartOfMinute(assumeNotNull(answer_ts))), toUInt32(ifNull(end_ts, now())) + 1, 60)), 'UTC') AS bucket, direction, trunk, 1 AS active\n      FROM v_calls\n      WHERE answer_ts IS NOT NULL AND start_ts >= {{{{from}}}} - INTERVAL 1 DAY AND start_ts < {{{{to}}}} AND ifNull(end_ts, now()) >= {{{{from}}}}{extra} AND {{{{filters}}}})"
+            );
+            (occupancy.as_str(), "bucket")
         }
         "reg" => {
             series = series.filter(|d| d == "ingress_group").map(|_| "grp".to_string());
@@ -406,6 +415,12 @@ pub fn shape(t: &Table, q: &Query, from: i64, to: i64, tz: Tz, meta: Value, now:
                     entry[i] = num(&r[vc]);
                     samples.entry(name).or_insert_with(|| vec![0; b.n])[i] = samples_col.and_then(|c| r[c].as_u64()).unwrap_or(1) as u32;
                 }
+            }
+            // Nothing happened yet: draw a flat zero rather than an empty chart.
+            if order.is_empty() && zero_fill {
+                order.push("value".to_string());
+                values.insert("value".to_string(), vec![Some(0.0); b.n]);
+                samples.insert("value".to_string(), vec![0; b.n]);
             }
             let total_of = |n: &String| values[n].iter().flatten().sum::<f64>();
             // A series that is zero everywhere only adds a legend entry.

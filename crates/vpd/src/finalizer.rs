@@ -58,6 +58,7 @@ struct M {
     ts: i64,
     capture_id: u32,
     capture_point: String,
+    agent_ip: String,
     src_ip: String,
     dst_ip: String,
     is_request: bool,
@@ -80,7 +81,7 @@ struct M {
     hep_cid: String,
 }
 
-const MSG_COLUMNS: &str = "toUnixTimestamp64Micro(ts) AS ts_us, capture_id, capture_point, src_ip, dst_ip, call_id, is_request, method, status, reason, cseq_num, cseq_method, from_user, from_tag, to_tag, ruri_user, via_branch, user_agent, codecs, sdp_ip, sdp_dir, q850_cause, x_cid, hep_cid";
+const MSG_COLUMNS: &str = "toUnixTimestamp64Micro(ts) AS ts_us, capture_id, capture_point, agent_ip, src_ip, dst_ip, call_id, is_request, method, status, reason, cseq_num, cseq_method, from_user, from_tag, to_tag, ruri_user, via_branch, user_agent, codecs, sdp_ip, sdp_dir, q850_cause, x_cid, hep_cid";
 
 fn s(v: &Value, k: &str) -> String {
     v[k].as_str().unwrap_or("").to_string()
@@ -95,6 +96,7 @@ fn message(v: &Value) -> (String, M) {
         ts: v["ts_us"].as_i64().unwrap_or(0),
         capture_id: v["capture_id"].as_u64().unwrap_or(0) as u32,
         capture_point: s(v, "capture_point"),
+        agent_ip: s(v, "agent_ip"),
         src_ip: s(v, "src_ip"),
         dst_ip: s(v, "dst_ip"),
         is_request: truthy(&v["is_request"]),
@@ -128,16 +130,20 @@ struct Dialog {
     response_retrans: HashMap<(u16, u32), u32>,
     capture_ids: BTreeSet<u32>,
     capture_points: BTreeSet<String>,
+    agent_ips: BTreeSet<String>,
     raw_count: u32,
 }
 
 impl Dialog {
     fn build(id: String, all: Vec<M>) -> Dialog {
         let mut seen: HashMap<(String, u16, u32, String), u32> = HashMap::new();
-        let mut d = Dialog { id, msgs: Vec::new(), retrans: 0, last_invite: 0, response_retrans: HashMap::new(), capture_ids: BTreeSet::new(), capture_points: BTreeSet::new(), raw_count: all.len() as u32 };
+        let mut d = Dialog { id, msgs: Vec::new(), retrans: 0, last_invite: 0, response_retrans: HashMap::new(), capture_ids: BTreeSet::new(), capture_points: BTreeSet::new(), agent_ips: BTreeSet::new(), raw_count: all.len() as u32 };
         for m in all {
             d.capture_ids.insert(m.capture_id);
             d.capture_points.insert(m.capture_point.clone());
+            if !m.agent_ip.is_empty() {
+                d.agent_ips.insert(m.agent_ip.clone());
+            }
             if m.is_request && m.method == "INVITE" && m.to_tag.is_empty() {
                 d.last_invite = m.ts;
             }
@@ -249,9 +255,9 @@ struct Qos {
     node: String,
 }
 
-fn agent_skewed(app: &App, ids: &BTreeSet<u32>) -> bool {
+fn agent_skewed(app: &App, ips: &BTreeSet<String>) -> bool {
     let agents = app.ingest.agents.read().unwrap();
-    ids.iter().any(|id| agents.get(id).is_some_and(|a| a.clock_offset_ms.abs() > 1000.0))
+    ips.iter().any(|ip| agents.get(ip).is_some_and(|a| a.clock_offset_ms.abs() > 1000.0))
 }
 
 /// Builds one call from its dialogs, earliest first. Returns the row and when to look again.
@@ -337,9 +343,11 @@ fn assemble(app: &App, topo: &Topology, legs: &[&Dialog], qos: &HashMap<String, 
 
     let mut capture_ids: BTreeSet<u32> = BTreeSet::new();
     let mut capture_points: BTreeSet<String> = BTreeSet::new();
+    let mut agent_ips: BTreeSet<String> = BTreeSet::new();
     for d in legs {
         capture_ids.extend(d.capture_ids.iter().copied());
         capture_points.extend(d.capture_points.iter().cloned());
+        agent_ips.extend(d.agent_ips.iter().cloned());
     }
     let all: Vec<&M> = legs.iter().flat_map(|d| d.msgs.iter()).collect();
     let ua_callee = egress_dialog.msgs.iter().find(|m| !m.is_request && m.status > 100 && !m.user_agent.is_empty()).map(|m| m.user_agent.clone()).unwrap_or_default();
@@ -389,7 +397,7 @@ fn assemble(app: &App, topo: &Topology, legs: &[&Dialog], qos: &HashMap<String, 
     add(mos.is_some_and(|m| m < 3.1) || loss.is_some_and(|l| l > 5.0) || jitter.is_some_and(|j| j > 50.0), "POOR_QUALITY");
     add(finished && !trunk.is_empty() && egress.status >= 400 && !matches!(egress.status, 486 | 487 | 600 | 603), "CARRIER_REJECT");
     add(held, "HOLD");
-    add(agent_skewed(app, &capture_ids), "CLOCK_SKEW");
+    add(agent_skewed(app, &agent_ips), "CLOCK_SKEW");
     let ua_l = invite.user_agent.to_ascii_lowercase();
     add(["friendly-scanner", "sipvicious", "sipcli", "pplsip", "vaxsip", "sundayddr"].iter().any(|s| ua_l.contains(s)), "SCANNER");
     let high_risk = app.settings.get("high_risk_prefixes");
@@ -416,6 +424,7 @@ fn assemble(app: &App, topo: &Topology, legs: &[&Dialog], qos: &HashMap<String, 
         "backend": backend,
         "capture_ids": capture_ids,
         "capture_points": capture_points,
+        "agent_ips": agent_ips,
         "media_node": media_node,
         "final_status": status,
         "final_reason": reason,

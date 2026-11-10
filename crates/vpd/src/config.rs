@@ -35,7 +35,7 @@ const fn d(key: &'static str, kind: Kind, default: &'static str, group: &'static
 use Kind::*;
 
 pub const DEFS: &[Def] = &[
-    d("app_name", Str, "voip-panel", "Branding", "Application name", "Shown in the sidebar, the login page and the browser tab.", false, true),
+    d("app_name", Str, "sip-source", "Branding", "Application name", "Shown in the sidebar, the login page and the browser tab.", false, true),
     d("accent_color", Str, "", "Branding", "Accent color", "CSS color for buttons and highlights, e.g. #2a78d6. Empty keeps the default.", false, true),
     d("default_theme", Choice(&["system", "light", "dark"]), "system", "Branding", "Default theme", "Used until a user picks their own.", false, true),
     d("login_message", Str, "", "Branding", "Login message", "Text shown under the sign-in form.", false, true),
@@ -111,6 +111,9 @@ pub const BOOT_VARS: &[(&str, &str, &str, bool, &str)] = &[
     ("VP_DB_MAX_CONNECTIONS", "10", "Connection pool size", false, "Database"),
     ("VP_DB_CONNECT_RETRIES", "60", "Attempts to reach MariaDB at startup before giving up", false, "Database"),
     ("VP_DB_CONNECT_RETRY_SECONDS", "2", "Wait between those attempts", false, "Database"),
+    ("VP_DATA_DIR", "/data", "Where the Local file storage keeps its data. Mount a volume here", false, "Storage"),
+    ("VP_LOCAL_ENGINE", "/usr/local/bin/clickhouse", "The storage engine the Local file storage runs. Only change it when running outside the image", false, "Storage"),
+    ("VP_LOCAL_PORT", "8124", "Port on 127.0.0.1 the Local file storage engine listens on inside the container", false, "Storage"),
     ("VP_LISTEN", "0.0.0.0:8080", "Address and port for the web UI and API", false, "Network"),
     ("VP_HEP_UDP", "0.0.0.0:9060", "Address and port for HEP over UDP. Empty turns it off", false, "Network"),
     ("VP_HEP_TCP", "0.0.0.0:9060", "Address and port for HEP over TCP. Empty turns it off", false, "Network"),
@@ -281,6 +284,9 @@ pub struct Boot {
     pub listen: SocketAddr,
     pub hep_udp: String,
     pub hep_tcp: String,
+    pub data_dir: String,
+    pub local_engine: String,
+    pub local_port: u16,
     pub db_url: Option<String>,
     pub db_host: String,
     pub db_port: u16,
@@ -324,6 +330,9 @@ impl Boot {
         let listen = env_or("VP_LISTEN", "0.0.0.0:8080");
         Ok(Boot {
             listen: listen.parse().map_err(|_| format!("VP_LISTEN is not a valid address: {listen}"))?,
+            data_dir: env_or("VP_DATA_DIR", "/data"),
+            local_engine: env_or("VP_LOCAL_ENGINE", "/usr/local/bin/clickhouse"),
+            local_port: env_num("VP_LOCAL_PORT", 8124)?,
             hep_udp: std::env::var("VP_HEP_UDP").unwrap_or_else(|_| "0.0.0.0:9060".into()),
             hep_tcp: std::env::var("VP_HEP_TCP").unwrap_or_else(|_| "0.0.0.0:9060".into()),
             db_url,
