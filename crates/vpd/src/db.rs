@@ -19,7 +19,7 @@ pub fn iso(t: NaiveDateTime) -> String {
 
 pub async fn connect(boot: &Boot) -> Result<MySqlPool, String> {
     let options = match &boot.db_url {
-        Some(url) => MySqlConnectOptions::from_str(url).map_err(|e| format!("SS_DB_URL is invalid: {e}"))?,
+        Some(url) => MySqlConnectOptions::from_str(url).map_err(|e| format!("VP_DB_URL is invalid: {e}"))?,
         None => {
             let ssl = match boot.db_ssl_mode.as_str() {
                 "disabled" => MySqlSslMode::Disabled,
@@ -59,59 +59,162 @@ pub async fn connect(boot: &Boot) -> Result<MySqlPool, String> {
     }
 }
 
-/// The schema versions, in order. Each file in `schema/mariadb` runs once, inside the named lock
-/// below, and is recorded in `schema_migrations`. Never change a file that has shipped: add one.
-const MIGRATIONS: &[(i32, &str)] = &[
-    (1, include_str!("../schema/mariadb/001_initial.sql")),
-    (2, include_str!("../schema/mariadb/002_capture_agents.sql")),
-    (3, include_str!("../schema/mariadb/003_sources.sql")),
-    (4, include_str!("../schema/mariadb/004_single_sign_on.sql")),
-];
-
-/// Splits a schema file into statements: `--` comment lines are dropped, and a statement ends with
-/// a semicolon at the end of a line.
-pub fn statements(file: &str) -> Vec<String> {
-    let mut out = Vec::new();
-    let mut current = String::new();
-    for line in file.lines() {
-        if line.trim_start().starts_with("--") {
-            continue;
-        }
-        current.push_str(line);
-        current.push('\n');
-        if line.trim_end().ends_with(';') {
-            let statement = current.trim().trim_end_matches(';').trim().to_string();
-            if !statement.is_empty() {
-                out.push(statement);
-            }
-            current.clear();
-        }
-    }
-    if !current.trim().is_empty() {
-        out.push(current.trim().to_string());
-    }
-    out
-}
+const MIGRATIONS: &[(i32, &[&str])] = &[(
+    1,
+    &[
+        "CREATE TABLE roles (
+            id BIGINT AUTO_INCREMENT PRIMARY KEY,
+            name VARCHAR(64) NOT NULL UNIQUE,
+            description VARCHAR(255) NOT NULL DEFAULT '',
+            permissions LONGTEXT NOT NULL,
+            locked TINYINT NOT NULL DEFAULT 0,
+            created_at DATETIME(6) NOT NULL,
+            updated_at DATETIME(6) NOT NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+        "CREATE TABLE users (
+            id BIGINT AUTO_INCREMENT PRIMARY KEY,
+            username VARCHAR(96) NOT NULL UNIQUE,
+            display_name VARCHAR(128) NOT NULL DEFAULT '',
+            email VARCHAR(190) NOT NULL DEFAULT '',
+            password_hash VARCHAR(255) NOT NULL,
+            role_id BIGINT NOT NULL,
+            status VARCHAR(16) NOT NULL DEFAULT 'active',
+            grants LONGTEXT NOT NULL,
+            denies LONGTEXT NOT NULL,
+            prefs LONGTEXT NOT NULL,
+            failed_attempts INT NOT NULL DEFAULT 0,
+            locked_until DATETIME(6) NULL,
+            last_login_at DATETIME(6) NULL,
+            created_at DATETIME(6) NOT NULL,
+            updated_at DATETIME(6) NOT NULL,
+            CONSTRAINT fk_users_role FOREIGN KEY (role_id) REFERENCES roles(id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+        "CREATE TABLE sessions (
+            id CHAR(64) PRIMARY KEY,
+            user_id BIGINT NOT NULL,
+            created_at DATETIME(6) NOT NULL,
+            last_seen_at DATETIME(6) NOT NULL,
+            expires_at DATETIME(6) NOT NULL,
+            ip VARCHAR(64) NOT NULL DEFAULT '',
+            user_agent VARCHAR(255) NOT NULL DEFAULT '',
+            CONSTRAINT fk_sessions_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+        "CREATE TABLE dashboards (
+            id BIGINT AUTO_INCREMENT PRIMARY KEY,
+            uid VARCHAR(64) NOT NULL UNIQUE,
+            title VARCHAR(190) NOT NULL,
+            description VARCHAR(512) NOT NULL DEFAULT '',
+            body LONGTEXT NOT NULL,
+            version INT NOT NULL DEFAULT 1,
+            updated_by VARCHAR(96) NOT NULL DEFAULT '',
+            created_at DATETIME(6) NOT NULL,
+            updated_at DATETIME(6) NOT NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+        "CREATE TABLE dashboard_versions (
+            id BIGINT AUTO_INCREMENT PRIMARY KEY,
+            dashboard_id BIGINT NOT NULL,
+            version INT NOT NULL,
+            body LONGTEXT NOT NULL,
+            message VARCHAR(255) NOT NULL DEFAULT '',
+            created_by VARCHAR(96) NOT NULL DEFAULT '',
+            created_at DATETIME(6) NOT NULL,
+            UNIQUE KEY uq_dashboard_version (dashboard_id, version),
+            CONSTRAINT fk_versions_dashboard FOREIGN KEY (dashboard_id) REFERENCES dashboards(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+        "CREATE TABLE storages (
+            id BIGINT AUTO_INCREMENT PRIMARY KEY,
+            name VARCHAR(96) NOT NULL UNIQUE,
+            type VARCHAR(32) NOT NULL,
+            config LONGTEXT NOT NULL,
+            secret LONGTEXT NOT NULL,
+            active TINYINT NOT NULL DEFAULT 0,
+            built_in TINYINT NOT NULL DEFAULT 0,
+            last_test_at DATETIME(6) NULL,
+            last_test_ok TINYINT NULL,
+            last_test_message VARCHAR(512) NOT NULL DEFAULT '',
+            created_at DATETIME(6) NOT NULL,
+            updated_at DATETIME(6) NOT NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+        "CREATE TABLE settings (
+            skey VARCHAR(96) PRIMARY KEY,
+            value LONGTEXT NOT NULL,
+            updated_by VARCHAR(96) NOT NULL DEFAULT '',
+            updated_at DATETIME(6) NOT NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+        "CREATE TABLE saved_searches (
+            id BIGINT AUTO_INCREMENT PRIMARY KEY,
+            owner_id BIGINT NOT NULL,
+            name VARCHAR(128) NOT NULL,
+            q TEXT NOT NULL,
+            shared TINYINT NOT NULL DEFAULT 0,
+            created_at DATETIME(6) NOT NULL,
+            CONSTRAINT fk_saved_owner FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+        "CREATE TABLE audit_events (
+            id BIGINT AUTO_INCREMENT PRIMARY KEY,
+            ts DATETIME(6) NOT NULL,
+            actor VARCHAR(96) NOT NULL,
+            src_ip VARCHAR(64) NOT NULL DEFAULT '',
+            action VARCHAR(64) NOT NULL,
+            object VARCHAR(190) NOT NULL DEFAULT '',
+            outcome VARCHAR(16) NOT NULL,
+            severity VARCHAR(16) NOT NULL DEFAULT 'info',
+            details TEXT NOT NULL,
+            KEY idx_audit_ts (ts)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+        "CREATE TABLE alert_acks (
+            alert_id VARCHAR(64) PRIMARY KEY,
+            acked_by VARCHAR(96) NOT NULL,
+            comment TEXT NOT NULL,
+            acked_at DATETIME(6) NOT NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+    ],
+), (
+    2,
+    &[
+        "DELETE FROM storages WHERE type = 'demo'",
+        "DROP TABLE alert_acks",
+        "CREATE TABLE agents (
+            capture_id INT UNSIGNED PRIMARY KEY,
+            name VARCHAR(128) NOT NULL,
+            source_ip VARCHAR(64) NOT NULL DEFAULT '',
+            last_seen DATETIME(6) NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+    ],
+), (
+    3,
+    &[
+        "CREATE TABLE sources (
+            ip VARCHAR(64) PRIMARY KEY,
+            alias VARCHAR(128) NOT NULL DEFAULT '',
+            capture_id INT UNSIGNED NOT NULL DEFAULT 0,
+            last_seen DATETIME(6) NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+        "INSERT IGNORE INTO sources (ip, alias, capture_id, last_seen)
+            SELECT source_ip, IF(name LIKE 'capture-%', '', name), capture_id, last_seen FROM agents WHERE source_ip <> ''",
+        "DROP TABLE agents",
+    ],
+)];
 
 pub async fn migrate(pool: &MySqlPool) -> Result<(), sqlx::Error> {
     // One connection holds a named lock so that several starting instances can't race.
     let mut conn = pool.acquire().await?;
-    sqlx::query("SELECT GET_LOCK('ss_migrate', 120)").execute(&mut *conn).await?;
+    sqlx::query("SELECT GET_LOCK('vp_migrate', 120)").execute(&mut *conn).await?;
     sqlx::query("CREATE TABLE IF NOT EXISTS schema_migrations (version INT PRIMARY KEY, applied_at DATETIME(6) NOT NULL) ENGINE=InnoDB")
         .execute(&mut *conn)
         .await?;
-    for (version, file) in MIGRATIONS {
+    for (version, statements) in MIGRATIONS {
         let done: Option<i32> = sqlx::query_scalar("SELECT version FROM schema_migrations WHERE version = ?").bind(version).fetch_optional(&mut *conn).await?;
         if done.is_some() {
             continue;
         }
-        for statement in statements(file) {
-            sqlx::query(&statement).execute(&mut *conn).await?;
+        for statement in *statements {
+            sqlx::query(statement).execute(&mut *conn).await?;
         }
         sqlx::query("INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)").bind(version).bind(utc_now()).execute(&mut *conn).await?;
         tracing::info!("applied database migration {version}");
     }
-    sqlx::query("SELECT RELEASE_LOCK('ss_migrate')").execute(&mut *conn).await?;
+    sqlx::query("SELECT RELEASE_LOCK('vp_migrate')").execute(&mut *conn).await?;
     Ok(())
 }
 
@@ -150,26 +253,6 @@ pub async fn seed(pool: &MySqlPool) -> Result<(), sqlx::Error> {
                 .execute(pool).await?;
         }
         set_marker(pool, "_seeded_roles").await?;
-    }
-    // Earlier versions named the roles differently. Rename the ones nobody changed, and add the
-    // built-in roles that are new, once.
-    if !marker(pool, "_roles_v2").await? {
-        let roles = auth::built_in_roles();
-        for (old, new, old_description) in auth::ROLE_RENAMES {
-            let Some((_, description, _, _)) = roles.iter().find(|r| r.0 == *new) else { continue };
-            let taken: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM roles WHERE name = ?").bind(new).fetch_one(pool).await?;
-            if old != new && taken == 0 {
-                sqlx::query("UPDATE roles SET name = ?, updated_at = ? WHERE name = ?").bind(new).bind(utc_now()).bind(old).execute(pool).await?;
-            }
-            sqlx::query("UPDATE roles SET description = ?, updated_at = ? WHERE name = ? AND description = ?").bind(description).bind(utc_now()).bind(new).bind(old_description).execute(pool).await?;
-        }
-        // Only roles that are new in this version; built-in roles someone deleted stay deleted.
-        for (name, description, perms, locked) in roles.into_iter().filter(|r| !auth::ROLE_RENAMES.iter().any(|x| x.1 == r.0)) {
-            sqlx::query("INSERT IGNORE INTO roles (name, description, permissions, locked, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)")
-                .bind(name).bind(description).bind(serde_json::to_string(&perms).unwrap_or_else(|_| "[]".into())).bind(locked as i8).bind(utc_now()).bind(utc_now())
-                .execute(pool).await?;
-        }
-        set_marker(pool, "_roles_v2").await?;
     }
     if !marker(pool, "_seeded_dashboards").await? {
         for d in built_in_dashboards() {

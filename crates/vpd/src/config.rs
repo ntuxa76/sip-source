@@ -1,4 +1,4 @@
-//! Configuration. Every application setting has an env var, `SS_<KEY>`. A value set in the
+//! Configuration. Every application setting has an env var, `VP_<KEY>`. A value set in the
 //! environment wins and is shown as locked in the UI; otherwise the value saved in MariaDB is used,
 //! then the default. Only the database connection is required.
 
@@ -26,17 +26,10 @@ pub struct Def {
     pub restart: bool,
     /// Sent to every signed-in browser (and to the login page when `login_visible`).
     pub public: bool,
-    /// A password or key: never sent back to the browser, kept encrypted in MariaDB when
-    /// SS_SECRET_KEY is set, and readable from a `_FILE` variable.
-    pub secret: bool,
 }
 
 const fn d(key: &'static str, kind: Kind, default: &'static str, group: &'static str, label: &'static str, help: &'static str, restart: bool, public: bool) -> Def {
-    Def { key, kind, default, group, label, help, restart, public, secret: false }
-}
-
-const fn secret(def: Def) -> Def {
-    Def { secret: true, ..def }
+    Def { key, kind, default, group, label, help, restart, public }
 }
 
 use Kind::*;
@@ -44,6 +37,7 @@ use Kind::*;
 pub const DEFS: &[Def] = &[
     d("app_name", Str, "sip-source", "Branding", "Application name", "Shown in the sidebar, the login page and the browser tab.", false, true),
     d("accent_color", Str, "", "Branding", "Accent color", "CSS color for buttons and highlights, e.g. #1a5fb4. Empty keeps the default.", false, true),
+    d("default_theme", Choice(&["system", "light", "dark"]), "system", "Branding", "Default theme", "Used until a user picks their own.", false, true),
     d("login_message", Str, "", "Branding", "Login message", "Text shown under the sign-in form.", false, true),
     d("banner_text", Str, "", "Branding", "Banner", "One line shown at the top of every page, e.g. Staging system.", false, true),
 
@@ -81,22 +75,8 @@ pub const DEFS: &[Def] = &[
     d("password_min_length", Int(8, 128), "12", "Sessions & passwords", "Minimum password length", "Applies when a password is set.", false, true),
     d("login_max_attempts", Int(1, 100), "5", "Sessions & passwords", "Failed logins before lockout", "Per account.", false, false),
     d("login_lockout_minutes", Int(1, 1440), "15", "Sessions & passwords", "Lockout duration (min)", "How long an account stays locked.", false, false),
-    d("cookie_name", Str, "ss_session", "Sessions & passwords", "Session cookie name", "Change it when several instances share a host name.", true, false),
+    d("cookie_name", Str, "vp_session", "Sessions & passwords", "Session cookie name", "Change it when several instances share a host name.", true, false),
     d("cookie_secure", Choice(&["auto", "true", "false"]), "auto", "Sessions & passwords", "Secure cookie", "auto follows the X-Forwarded-Proto header set by a TLS proxy.", false, false),
-
-    d("sso_enabled", Bool, "false", "Single sign-on", "Enable single sign-on", "Adds a sign-in button for your OpenID Connect provider (Microsoft Entra ID, Google, Keycloak, Okta, Authentik ...). Register the redirect URL shown above this list with the provider.", false, false),
-    d("sso_provider_name", Str, "SSO", "Single sign-on", "Button label", "The sign-in button reads \"Sign in with\" followed by this.", false, false),
-    d("sso_issuer", Str, "", "Single sign-on", "Issuer URL", "The provider's issuer, e.g. https://login.microsoftonline.com/<tenant>/v2.0. Its /.well-known/openid-configuration is read from there.", false, false),
-    d("sso_client_id", Str, "", "Single sign-on", "Client ID", "The application (client) ID registered with the provider.", false, false),
-    secret(d("sso_client_secret", Str, "", "Single sign-on", "Client secret", "The client secret registered with the provider.", false, false)),
-    d("sso_scopes", Str, "openid profile email", "Single sign-on", "Scopes", "Space separated. Add the scope that carries group or role claims if your provider needs one.", false, false),
-    d("sso_username_claim", Str, "preferred_username", "Single sign-on", "Username claim", "The ID token claim used as the user name. Falls back to email, then the subject.", false, false),
-    d("sso_auto_create", Bool, "true", "Single sign-on", "Create accounts on first sign-in", "When off, an administrator must create the account first; it is linked on the user's first single sign-on.", false, false),
-    d("sso_default_role", Str, "Viewer", "Single sign-on", "Role for new accounts", "Name of the role given to accounts created by single sign-on.", false, false),
-    d("sso_role_claim", Str, "groups", "Single sign-on", "Group claim", "The ID token claim that lists the user's groups or roles, used by the role mapping below.", false, false),
-    d("sso_role_map", Str, "", "Single sign-on", "Role mapping", "Group=Role pairs, comma separated, e.g. voice-admins=Administrator,noc=Analyst. When set, the role is updated at every sign-in from the first matching group, or the role for new accounts when none matches.", false, false),
-    d("sso_allow_password", Bool, "true", "Single sign-on", "Allow password sign-in", "When off, only accounts that can manage users can still sign in with a password, so the system stays reachable if the provider is down.", false, false),
-    d("sso_redirect_url", Str, "", "Single sign-on", "Redirect URL", "Leave empty to use this server's address. Set it when the address users reach is different, e.g. https://sip.example.com/api/v1/auth/sso/callback.", false, false),
 
     d("audit_retention_days", Int(1, 3650), "365", "Audit", "Audit retention (days)", "Older audit events are deleted daily.", false, false),
 
@@ -121,33 +101,33 @@ pub const DEFS: &[Def] = &[
 /// Process-level variables, which are read once at startup and aren't stored anywhere:
 /// (name, default, description, required, group).
 pub const BOOT_VARS: &[(&str, &str, &str, bool, &str)] = &[
-    ("SS_DB_HOST", "", "MariaDB host name or IP", true, "Database"),
-    ("SS_DB_USER", "", "MariaDB user", true, "Database"),
-    ("SS_DB_PASSWORD", "", "MariaDB password. SS_DB_PASSWORD_FILE reads it from a file instead (Docker secrets)", true, "Database"),
-    ("SS_DB_NAME", "voip_panel", "Database name. It must already exist; the tables are created on first start", false, "Database"),
-    ("SS_DB_PORT", "3306", "MariaDB port", false, "Database"),
-    ("SS_DB_URL", "", "Replaces all SS_DB_* above, e.g. mysql://user:pass@host:3306/voip_panel. SS_DB_URL_FILE also works", false, "Database"),
-    ("SS_DB_SSL_MODE", "preferred", "disabled, preferred, required, verify_ca or verify_identity", false, "Database"),
-    ("SS_DB_MAX_CONNECTIONS", "10", "Connection pool size", false, "Database"),
-    ("SS_DB_CONNECT_RETRIES", "60", "Attempts to reach MariaDB at startup before giving up", false, "Database"),
-    ("SS_DB_CONNECT_RETRY_SECONDS", "2", "Wait between those attempts", false, "Database"),
-    ("SS_DATA_DIR", "/data", "Where the Local file storage keeps its data. Mount a volume here", false, "Storage"),
-    ("SS_LOCAL_ENGINE", "/usr/local/bin/clickhouse", "The storage engine the Local file storage runs. Only change it when running outside the image", false, "Storage"),
-    ("SS_LOCAL_PORT", "8124", "Port on 127.0.0.1 the Local file storage engine listens on inside the container", false, "Storage"),
-    ("SS_LISTEN", "0.0.0.0:8080", "Address and port for the web UI and API", false, "Network"),
-    ("SS_HEP_UDP", "0.0.0.0:9060", "Address and port for HEP over UDP. Empty turns it off", false, "Network"),
-    ("SS_HEP_TCP", "0.0.0.0:9060", "Address and port for HEP over TCP. Empty turns it off", false, "Network"),
-    ("SS_TRUST_PROXY", "false", "Take the client address from X-Forwarded-For. Only behind a proxy you control", false, "Network"),
-    ("SS_ADMIN_USERNAME", "admin", "Name of the first administrator", false, "First start and secrets"),
-    ("SS_ADMIN_PASSWORD", "", "Creates the administrator at startup and skips the first-run screen. SS_ADMIN_PASSWORD_FILE also works", false, "First start and secrets"),
-    ("SS_SETUP_TOKEN", "", "If set, the first-run screen asks for this token. Use it when the port is reachable by others before setup", false, "First start and secrets"),
-    ("SS_SECRET_KEY", "", "Encrypts the ClickHouse passwords saved from the Storage page. Keep it stable: changing it makes saved passwords unreadable", false, "First start and secrets"),
-    ("SS_LOG_LEVEL", "info", "trace, debug, info, warn or error", false, "Logging"),
-    ("SS_LOG_FORMAT", "text", "text or json", false, "Logging"),
+    ("VP_DB_HOST", "", "MariaDB host name or IP", true, "Database"),
+    ("VP_DB_USER", "", "MariaDB user", true, "Database"),
+    ("VP_DB_PASSWORD", "", "MariaDB password. VP_DB_PASSWORD_FILE reads it from a file instead (Docker secrets)", true, "Database"),
+    ("VP_DB_NAME", "voip_panel", "Database name. It must already exist; the tables are created on first start", false, "Database"),
+    ("VP_DB_PORT", "3306", "MariaDB port", false, "Database"),
+    ("VP_DB_URL", "", "Replaces all VP_DB_* above, e.g. mysql://user:pass@host:3306/voip_panel. VP_DB_URL_FILE also works", false, "Database"),
+    ("VP_DB_SSL_MODE", "preferred", "disabled, preferred, required, verify_ca or verify_identity", false, "Database"),
+    ("VP_DB_MAX_CONNECTIONS", "10", "Connection pool size", false, "Database"),
+    ("VP_DB_CONNECT_RETRIES", "60", "Attempts to reach MariaDB at startup before giving up", false, "Database"),
+    ("VP_DB_CONNECT_RETRY_SECONDS", "2", "Wait between those attempts", false, "Database"),
+    ("VP_DATA_DIR", "/data", "Where the Local file storage keeps its data. Mount a volume here", false, "Storage"),
+    ("VP_LOCAL_ENGINE", "/usr/local/bin/clickhouse", "The storage engine the Local file storage runs. Only change it when running outside the image", false, "Storage"),
+    ("VP_LOCAL_PORT", "8124", "Port on 127.0.0.1 the Local file storage engine listens on inside the container", false, "Storage"),
+    ("VP_LISTEN", "0.0.0.0:8080", "Address and port for the web UI and API", false, "Network"),
+    ("VP_HEP_UDP", "0.0.0.0:9060", "Address and port for HEP over UDP. Empty turns it off", false, "Network"),
+    ("VP_HEP_TCP", "0.0.0.0:9060", "Address and port for HEP over TCP. Empty turns it off", false, "Network"),
+    ("VP_TRUST_PROXY", "false", "Take the client address from X-Forwarded-For. Only behind a proxy you control", false, "Network"),
+    ("VP_ADMIN_USERNAME", "admin", "Name of the first administrator", false, "First start and secrets"),
+    ("VP_ADMIN_PASSWORD", "", "Creates the administrator at startup and skips the first-run screen. VP_ADMIN_PASSWORD_FILE also works", false, "First start and secrets"),
+    ("VP_SETUP_TOKEN", "", "If set, the first-run screen asks for this token. Use it when the port is reachable by others before setup", false, "First start and secrets"),
+    ("VP_SECRET_KEY", "", "Encrypts the ClickHouse passwords saved from the Storage page. Keep it stable: changing it makes saved passwords unreadable", false, "First start and secrets"),
+    ("VP_LOG_LEVEL", "info", "trace, debug, info, warn or error", false, "Logging"),
+    ("VP_LOG_FORMAT", "text", "text or json", false, "Logging"),
 ];
 
 pub fn env_name(key: &str) -> String {
-    format!("SS_{}", key.to_uppercase())
+    format!("VP_{}", key.to_uppercase())
 }
 
 pub fn def(key: &str) -> Option<&'static Def> {
@@ -182,14 +162,13 @@ pub struct Settings {
 }
 
 impl Settings {
-    /// Reads `SS_*` values. Invalid ones stop startup, so a typo can't be silently ignored.
+    /// Reads `VP_*` values. Invalid ones stop startup, so a typo can't be silently ignored.
     pub fn from_env() -> Result<Settings, String> {
         let mut env = HashMap::new();
         let mut errors = Vec::new();
         for def in DEFS {
             let name = env_name(def.key);
-            let value = if def.secret { env_secret(&name).ok_or(()) } else { var(&name).map_err(|_| ()) };
-            if let Ok(value) = value {
+            if let Ok(value) = std::env::var(&name) {
                 match validate(def, &value) {
                     Ok(()) => {
                         env.insert(def.key, value.trim().to_string());
@@ -272,46 +251,29 @@ impl Settings {
             json!({
                 "key": d.key, "env": env_name(d.key), "group": d.group, "label": d.label, "help": d.help,
                 "kind": kind, "min": min, "max": max, "options": options, "default": d.default,
-                "value": if d.secret { String::new() } else { self.get(d.key) }, "set": !self.get(d.key).is_empty(),
-                "secret": d.secret, "source": source, "restart": d.restart,
+                "value": self.get(d.key), "source": source, "restart": d.restart,
             })
         }).collect::<Vec<_>>())
     }
 }
 
-/// Reads an `SS_*` variable. Versions before 0.7 used a `VP_` prefix; those names still work so
-/// an upgrade doesn't break a running install, with a warning to rename them.
-pub fn var(name: &str) -> Result<String, std::env::VarError> {
-    let found = std::env::var(name);
-    if found.is_ok() {
-        return found;
-    }
-    let Some(rest) = name.strip_prefix("SS_") else { return found };
-    let legacy = format!("VP_{rest}");
-    let old = std::env::var(&legacy);
-    if old.is_ok() {
-        eprintln!("warning: {legacy} is deprecated, rename it to {name}");
-    }
-    old.or(found)
-}
-
 /// Reads `name`, or the contents of the file named by `name_FILE` (for Docker secrets).
 pub fn env_secret(name: &str) -> Option<String> {
-    if let Ok(v) = var(name)
+    if let Ok(v) = std::env::var(name)
         && !v.is_empty()
     {
         return Some(v);
     }
-    let path = var(&format!("{name}_FILE")).ok()?;
+    let path = std::env::var(format!("{name}_FILE")).ok()?;
     std::fs::read_to_string(path).ok().map(|s| s.trim_end_matches(['\r', '\n']).to_string())
 }
 
 fn env_or(name: &str, default: &str) -> String {
-    var(name).ok().filter(|v| !v.is_empty()).unwrap_or_else(|| default.to_string())
+    std::env::var(name).ok().filter(|v| !v.is_empty()).unwrap_or_else(|| default.to_string())
 }
 
 fn env_num<T: std::str::FromStr>(name: &str, default: T) -> Result<T, String> {
-    match var(name) {
+    match std::env::var(name) {
         Ok(v) if !v.is_empty() => v.parse().map_err(|_| format!("{name} is not a valid number: {v}")),
         _ => Ok(default),
     }
@@ -346,50 +308,50 @@ pub struct Boot {
 
 impl Boot {
     pub fn from_env() -> Result<Boot, String> {
-        let db_url = env_secret("SS_DB_URL");
-        let db_host = env_or("SS_DB_HOST", "");
-        let db_user = env_or("SS_DB_USER", "");
-        let db_password = env_secret("SS_DB_PASSWORD").unwrap_or_default();
+        let db_url = env_secret("VP_DB_URL");
+        let db_host = env_or("VP_DB_HOST", "");
+        let db_user = env_or("VP_DB_USER", "");
+        let db_password = env_secret("VP_DB_PASSWORD").unwrap_or_default();
         if db_url.is_none() {
             let mut missing = Vec::new();
             if db_host.is_empty() {
-                missing.push("SS_DB_HOST");
+                missing.push("VP_DB_HOST");
             }
             if db_user.is_empty() {
-                missing.push("SS_DB_USER");
+                missing.push("VP_DB_USER");
             }
             if db_password.is_empty() {
-                missing.push("SS_DB_PASSWORD (or SS_DB_PASSWORD_FILE)");
+                missing.push("VP_DB_PASSWORD (or VP_DB_PASSWORD_FILE)");
             }
             if !missing.is_empty() {
-                return Err(format!("Missing required settings: {}. Alternatively set SS_DB_URL=mysql://user:pass@host:3306/voip_panel", missing.join(", ")));
+                return Err(format!("Missing required settings: {}. Alternatively set VP_DB_URL=mysql://user:pass@host:3306/voip_panel", missing.join(", ")));
             }
         }
-        let listen = env_or("SS_LISTEN", "0.0.0.0:8080");
+        let listen = env_or("VP_LISTEN", "0.0.0.0:8080");
         Ok(Boot {
-            listen: listen.parse().map_err(|_| format!("SS_LISTEN is not a valid address: {listen}"))?,
-            data_dir: env_or("SS_DATA_DIR", "/data"),
-            local_engine: env_or("SS_LOCAL_ENGINE", "/usr/local/bin/clickhouse"),
-            local_port: env_num("SS_LOCAL_PORT", 8124)?,
-            hep_udp: var("SS_HEP_UDP").unwrap_or_else(|_| "0.0.0.0:9060".into()),
-            hep_tcp: var("SS_HEP_TCP").unwrap_or_else(|_| "0.0.0.0:9060".into()),
+            listen: listen.parse().map_err(|_| format!("VP_LISTEN is not a valid address: {listen}"))?,
+            data_dir: env_or("VP_DATA_DIR", "/data"),
+            local_engine: env_or("VP_LOCAL_ENGINE", "/usr/local/bin/clickhouse"),
+            local_port: env_num("VP_LOCAL_PORT", 8124)?,
+            hep_udp: std::env::var("VP_HEP_UDP").unwrap_or_else(|_| "0.0.0.0:9060".into()),
+            hep_tcp: std::env::var("VP_HEP_TCP").unwrap_or_else(|_| "0.0.0.0:9060".into()),
             db_url,
             db_host,
-            db_port: env_num("SS_DB_PORT", 3306)?,
-            db_name: env_or("SS_DB_NAME", "voip_panel"),
+            db_port: env_num("VP_DB_PORT", 3306)?,
+            db_name: env_or("VP_DB_NAME", "voip_panel"),
             db_user,
             db_password,
-            db_ssl_mode: env_or("SS_DB_SSL_MODE", "preferred"),
-            db_max_connections: env_num("SS_DB_MAX_CONNECTIONS", 10)?,
-            db_connect_retries: env_num("SS_DB_CONNECT_RETRIES", 60)?,
-            db_connect_retry_seconds: env_num("SS_DB_CONNECT_RETRY_SECONDS", 2)?,
-            setup_token: env_secret("SS_SETUP_TOKEN"),
-            admin_username: env_or("SS_ADMIN_USERNAME", "admin"),
-            admin_password: env_secret("SS_ADMIN_PASSWORD"),
-            secret_key: env_secret("SS_SECRET_KEY"),
-            log_level: env_or("SS_LOG_LEVEL", "info"),
-            log_format: env_or("SS_LOG_FORMAT", "text"),
-            trust_proxy: env_or("SS_TRUST_PROXY", "false") == "true",
+            db_ssl_mode: env_or("VP_DB_SSL_MODE", "preferred"),
+            db_max_connections: env_num("VP_DB_MAX_CONNECTIONS", 10)?,
+            db_connect_retries: env_num("VP_DB_CONNECT_RETRIES", 60)?,
+            db_connect_retry_seconds: env_num("VP_DB_CONNECT_RETRY_SECONDS", 2)?,
+            setup_token: env_secret("VP_SETUP_TOKEN"),
+            admin_username: env_or("VP_ADMIN_USERNAME", "admin"),
+            admin_password: env_secret("VP_ADMIN_PASSWORD"),
+            secret_key: env_secret("VP_SECRET_KEY"),
+            log_level: env_or("VP_LOG_LEVEL", "info"),
+            log_format: env_or("VP_LOG_FORMAT", "text"),
+            trust_proxy: env_or("VP_TRUST_PROXY", "false") == "true",
         })
     }
 }

@@ -4,7 +4,7 @@
 #   cp .env.compose.example .env      # then set the passwords
 #   docker compose up -d
 #
-# Every SS_* variable is described in docs/ENVIRONMENT.md.
+# Every VP_* variable is described in docs/ENVIRONMENT.md.
 services:
   mariadb:
     image: docker.io/library/mariadb:11.4
@@ -13,7 +13,7 @@ services:
       MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:?set MARIADB_ROOT_PASSWORD in .env}
       MARIADB_DATABASE: voip_panel
       MARIADB_USER: voip_panel
-      MARIADB_PASSWORD: ${SS_DB_PASSWORD:?set SS_DB_PASSWORD in .env}
+      MARIADB_PASSWORD: ${VP_DB_PASSWORD:?set VP_DB_PASSWORD in .env}
     volumes:
       - mariadb-data:/var/lib/mysql
     healthcheck:
@@ -23,26 +23,26 @@ services:
       retries: 30
 
   sip-source:
-    image: ntuxa76/sip-source:0.7
+    image: ntuxa76/sip-source:0.6
     restart: unless-stopped
     depends_on:
       mariadb:
         condition: service_healthy
     environment:
-      SS_DB_HOST: mariadb
-      SS_DB_USER: voip_panel
-      SS_DB_PASSWORD: ${SS_DB_PASSWORD}
-      SS_SECRET_KEY: ${SS_SECRET_KEY:-}
-      SS_SETUP_TOKEN: ${SS_SETUP_TOKEN:-}
-      # Add any other SS_* variable here, for example:
-      # SS_DEFAULT_TZ: Asia/Baghdad
-      # SS_HEP_AUTH_KEY: change-me
+      VP_DB_HOST: mariadb
+      VP_DB_USER: voip_panel
+      VP_DB_PASSWORD: ${VP_DB_PASSWORD}
+      VP_SECRET_KEY: ${VP_SECRET_KEY:-}
+      VP_SETUP_TOKEN: ${VP_SETUP_TOKEN:-}
+      # Add any other VP_* variable here, for example:
+      # VP_DEFAULT_TZ: Asia/Baghdad
+      # VP_HEP_AUTH_KEY: change-me
     volumes:
       - sip-source-data:/data
     ports:
-      - "${SS_PORT:-8080}:8080"
-      - "${SS_HEP_PORT:-9060}:9060/udp"
-      - "${SS_HEP_PORT:-9060}:9060/tcp"
+      - "${VP_PORT:-8080}:8080"
+      - "${VP_HEP_PORT:-9060}:9060/udp"
+      - "${VP_HEP_PORT:-9060}:9060/tcp"
 
 volumes:
   mariadb-data:

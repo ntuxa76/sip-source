@@ -89,9 +89,7 @@ pub fn expand_macros(sql: &str, from_ms: i64, to_ms: i64, interval_s: i64, tz: T
         .replace("{{tz}}", &format!("'{tz}'"))
         .replace("{{filters}}", if filters.is_empty() { "1 = 1" } else { filters });
     for (name, values) in vars {
-        // Plain decimal numbers go in as numbers; everything else is a quoted string.
-        let numeric = |v: &str| !v.is_empty() && v.len() < 32 && v.trim_start_matches('-').split_once('.').map_or(v.trim_start_matches('-').chars().all(|c| c.is_ascii_digit()), |(i, f)| !i.is_empty() && i.chars().chain(f.chars()).all(|c| c.is_ascii_digit()) && !f.is_empty());
-        let list = values.iter().map(|v| if numeric(v) { v.clone() } else { quote(v) }).collect::<Vec<_>>().join(", ");
+        let list = values.iter().map(|v| if v.parse::<f64>().is_ok() { v.clone() } else { quote(v) }).collect::<Vec<_>>().join(", ");
         out = out.replace(&format!("{{{{{name}}}}}"), &list);
     }
     out

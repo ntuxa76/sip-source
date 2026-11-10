@@ -225,37 +225,4 @@ mod tests {
         assert_eq!(frame_len(&p[..3]).unwrap(), None);
         assert_eq!(frame_len(&p).unwrap(), Some(p.len()));
     }
-
-    /// Anyone who can reach the HEP port can send anything, so malformed input must be rejected,
-    /// never panic. Truncations and random bytes, around a valid packet and on their own.
-    #[test]
-    fn hostile_input_never_panics() {
-        use rand::{Rng, SeedableRng};
-        let mut rng = rand::rngs::StdRng::seed_from_u64(7);
-        let sip = b"INVITE sip:1@x SIP/2.0\r\nVia: SIP/2.0/UDP a;branch=z9hG4bK1\r\nCall-ID: c\r\nCSeq: 1 INVITE\r\nFrom: <sip:2@x>;tag=a\r\nTo: <sip:1@x>\r\nContent-Length: 4\r\n\r\nv=0\n";
-        let valid = packet(&[chunk(0x0002, &[17]), chunk(0x0003, &[10, 0, 0, 1]), chunk(0x0004, &[10, 0, 0, 2]), chunk(0x000b, &[1]), chunk(0x000f, sip)]);
-        for n in 0..=valid.len() {
-            let _ = decode(&valid[..n]);
-            let _ = frame_len(&valid[..n]);
-        }
-        for _ in 0..50_000 {
-            let mut buf = if rng.gen_bool(0.5) { valid.clone() } else { (0..rng.gen_range(0..200)).map(|_| rng.r#gen()).collect() };
-            for _ in 0..rng.gen_range(0..8) {
-                if !buf.is_empty() {
-                    let i = rng.gen_range(0..buf.len());
-                    buf[i] = rng.r#gen();
-                }
-            }
-            if rng.gen_bool(0.3) && buf.len() > 4 {
-                buf[0..4].copy_from_slice(b"HEP3");
-            }
-            let _ = frame_len(&buf);
-            if let Ok(h) = decode(&buf) {
-                let _ = crate::sip::parse(&String::from_utf8_lossy(&h.payload));
-            }
-            let text = String::from_utf8_lossy(&buf);
-            let _ = crate::sip::parse(&text);
-            let _ = crate::sip::parse_sdp(&text);
-        }
-    }
 }

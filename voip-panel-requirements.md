@@ -168,7 +168,7 @@ It keeps everything HOMER does well (HEP ingest, ladder diagram, PCAP export, Qo
 - Auth: `argon2`, `totp-rs`, `openidconnect`, `ldap3`, a RADIUS client crate (to select; RFC 2865 PAP and CHAP).
 - Notifications: `lettre` (SMTP), `reqwest` (webhooks).
 - Observability: `tracing`, `tracing-opentelemetry`, `opentelemetry-otlp`, `metrics` + `metrics-exporter-prometheus`.
-- Config and CLI: `figment` (TOML + `SS_*` environment variables), `clap`.
+- Config and CLI: `figment` (TOML + `VP_*` environment variables), `clap`.
 - Scripting (P2): `mlua` (Lua 5.4, sandboxed).
 - UI embedding: `rust-embed`.
 - Quality: `cargo-nextest`, `proptest`, `cargo-fuzz`, `criterion`, `cargo-deny`, `cargo-audit`, `clippy -D warnings`; `unsafe` forbidden outside audited parser/IO modules.
@@ -613,7 +613,7 @@ This section answers the main complaint about HOMER 11. Every chart in the produ
 | NFR-09 | **Observability.** Prometheus metrics on every role (ingest per agent/proto, drops by reason, queue depth, insert latency and errors, spool size/age, finalizer lag, query latency per class, alert evaluation), structured JSON logs with request ids, OpenTelemetry traces for API requests and ClickHouse queries, `/healthz` and `/readyz` per role. |
 | NFR-10 | **Deployment.** All-in-one (Docker Compose or Podman Quadlet: `vpd --role all` + ClickHouse + PostgreSQL) running in under 15 minutes; RPM with one systemd unit per role; Helm chart (API with HPA; collectors as Deployment with UDP/TCP Services or DaemonSet with host networking; worker ≥ 2 replicas with leader election; PodDisruptionBudgets; NetworkPolicies; migrations as a pre-upgrade Job). Production ClickHouse is external to the chart (VMs or an operator). |
 | NFR-11 | **Upgrades.** Versioned migrations for PostgreSQL and ClickHouse; zero-downtime upgrades for API and collectors (expand/contract); ClickHouse migrations are online operations (add column, add index, modify TTL, new materialized view); rewriting large tables only via an explicit Admin-approved job. |
-| NFR-12 | **Configuration.** Bootstrap settings in TOML + `SS_*` environment variables; runtime settings in PostgreSQL editable in the UI; `vpctl config check` validates before start. |
+| NFR-12 | **Configuration.** Bootstrap settings in TOML + `VP_*` environment variables; runtime settings in PostgreSQL editable in the UI; `vpctl config check` validates before start. |
 | NFR-13 | **Testing.** Unit and property tests for all parsers; continuous fuzzing; a golden corpus of anonymized real PCAPs with expected call records and findings; an end-to-end lab (OpenSIPS + Asterisk + rtpengine containers, SIPp scenarios: basic call, busy, no answer, cancel, auth challenge, forking, transfer, ACK loss, one-way audio, carrier 503) asserting call records and findings; load test at the NFR-01 design target before go-live; visual regression for charts and the ladder. |
 | NFR-14 | **Documentation.** Operator guide, integration guide (OpenSIPS, Asterisk, rtpengine, heplify, phones), data dictionary of public views, metric definitions, API reference, runbooks (ingest drops, spool growth, ClickHouse disk full, replica lag, finalizer lag, agent clock skew, restore). |
 | NFR-15 | **Code quality.** Rust workspace with `rustfmt`, `clippy -D warnings`, no `unsafe` outside audited modules, documented minimum Rust version, reproducible builds; frontend in strict TypeScript with ESLint; initial JS bundle < 500 KB gzipped. |

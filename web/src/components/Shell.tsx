@@ -1,17 +1,25 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, Navigate, Outlet, useNavigate, useRouterState, useSearch } from "@tanstack/react-router";
+import { Link, Outlet, useNavigate, useRouterState, useSearch } from "@tanstack/react-router";
 import { BarChart3, Check, ChevronDown, ChevronLeft, ChevronRight, Clock, Compass, Database, LayoutDashboard, LogOut, Menu, Moon, Radio, RefreshCw, Search, Server, Settings, Sun, Users, X } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { get, post } from "../lib/api";
 import { rangeParam, resolveMs, usePrefs, useRange, useSource } from "../lib/context";
 import { fmtDateTime, tzOffsetMs } from "../lib/format";
-import { adminHome, homePath, pathAllowed, seesTraffic } from "../lib/access";
 import { Button, IconButton, Select, fieldClass, popoverClass, useDismiss } from "./ui";
+
+const ADMIN_SECTIONS: [string, string][] = [
+  ["users_manage", "users"],
+  ["roles_manage", "roles"],
+  ["settings_manage", "settings"],
+  ["storage_manage", "storage"],
+  ["system_view", "sources"],
+  ["audit_read", "audit"],
+];
 
 function useNav() {
   const { can, settings } = usePrefs();
-  const admin = adminHome(can);
+  const adminSection = ADMIN_SECTIONS.find(([perm]) => can(perm))?.[1];
   const items = [
     { id: "home", group: "Monitor", to: "/", label: "Home", icon: LayoutDashboard, show: can("dashboards_view") },
     { id: "dashboards", group: "Monitor", to: "/dashboards", label: "Dashboards", icon: BarChart3, show: can("dashboards_view") },
@@ -20,7 +28,7 @@ function useNav() {
     { id: "search", group: "Troubleshoot", to: "/search", label: "Search", icon: Search, show: can("search_all") },
     { id: "subscribers", group: "Troubleshoot", to: "/subscribers", label: "Subscribers", icon: Users, show: can("subscribers_view") },
     { id: "sql", group: "Troubleshoot", to: "/sql", label: "SQL workbench", icon: Database, show: can("sql_workbench") && settings.sql_enabled },
-    { id: "admin", group: "System", to: admin ?? "/admin/users", label: "Admin", icon: Settings, show: Boolean(admin) },
+    { id: "admin", group: "System", to: `/admin/${adminSection ?? "users"}`, label: "Admin", icon: Settings, show: Boolean(adminSection) },
   ].filter((n) => n.show);
   return ["Monitor", "Troubleshoot", "System"].map((g) => ({ group: g, items: items.filter((n) => n.group === g) })).filter((g) => g.items.length > 0);
 }
@@ -83,12 +91,12 @@ export function Shell() {
     document.getElementById("main-scroll")?.focus();
   };
 
-  // A page the account can't open, such as one left in the address bar by the previous user,
-  // sends it to its own start page instead of showing an error.
-  const page = pathAllowed(path, can, settings.sql_enabled) ? <Outlet /> : <Navigate to={homePath(can, settings.sql_enabled)} replace />;
-
   if (search.kiosk) {
-    return <main className="min-h-full p-4">{page}</main>;
+    return (
+      <main className="min-h-full p-4">
+        <Outlet />
+      </main>
+    );
   }
 
   const banner = "shrink-0 px-3 sm:px-4 py-1.5 bg-warn-wash border-b border-line text-warn text-xs";
@@ -101,10 +109,8 @@ export function Shell() {
       {menuOpen && <div className="lg:hidden fixed inset-0 z-30 bg-scrim" onClick={() => setMenuOpen(false)} aria-hidden />}
       <aside id="sidebar" className={`${menuOpen ? "max-lg:fixed max-lg:inset-y-0 max-lg:left-0 max-lg:z-40 max-lg:shadow-pop" : "max-lg:hidden"} w-56 shrink-0 flex flex-col bg-surface border-r border-line`}>
         <div className="h-12 shrink-0 flex items-center gap-2.5 px-4 border-b border-line">
-          <Link to={homePath(can, settings.sql_enabled)} title="Home" className="flex items-center gap-2.5 min-w-0 -mx-1 px-1 py-1 rounded-md hover:bg-hover">
-            <img src="/logo.png" alt="" width={24} height={24} className="shrink-0" />
-            <span className="text-sm font-semibold truncate">{settings.app_name}</span>
-          </Link>
+          <img src="/logo.png" alt="" width={24} height={24} className="shrink-0" />
+          <span className="text-sm font-semibold truncate">{settings.app_name}</span>
           <IconButton label="Close menu" onClick={() => setMenuOpen(false)} className="lg:hidden ml-auto -mr-2">
             <X size={16} aria-hidden />
           </IconButton>
@@ -161,7 +167,7 @@ export function Shell() {
           </div>
         )}
         <main className="flex-1 min-h-0 overflow-auto p-3 sm:p-4 focus:outline-none" id="main-scroll" tabIndex={-1}>
-          {page}
+          <Outlet />
         </main>
       </div>
     </div>
@@ -170,10 +176,6 @@ export function Shell() {
 
 function TopBar({ menuOpen, onMenu }: { menuOpen: boolean; onMenu: () => void }) {
   const { can } = usePrefs();
-  const path = useRouterState({ select: (s) => s.location.pathname });
-  // The time range and source only apply to pages that show captured traffic.
-  const traffic = seesTraffic(can) && !path.startsWith("/admin") && path !== "/preferences";
-  const lookup = can("search_all") || can("subscribers_view");
   const navigate = useNavigate();
   const search = useSearch({ strict: false }) as { q?: string; from?: string; to?: string };
   const [q, setQ] = useState(search.q ?? "");
@@ -216,7 +218,7 @@ function TopBar({ menuOpen, onMenu }: { menuOpen: boolean; onMenu: () => void })
       <IconButton id="menu-button" label="Open menu" onClick={onMenu} aria-expanded={menuOpen} aria-controls="sidebar" className="lg:hidden -ml-1">
         <Menu size={18} aria-hidden />
       </IconButton>
-      {lookup ? <form onSubmit={submit} role="search" className="relative flex-1 min-w-[200px] max-w-[560px]">
+      <form onSubmit={submit} role="search" className="relative flex-1 min-w-[200px] max-w-[640px]">
         <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-3 pointer-events-none" aria-hidden />
         <input
           ref={input}
@@ -226,7 +228,7 @@ function TopBar({ menuOpen, onMenu }: { menuOpen: boolean; onMenu: () => void })
           onBlur={() => setTimeout(() => setFocus(false), 120)}
           spellCheck={false}
           aria-label="Universal search"
-          placeholder={browse ? "Search number, Call-ID or IP" : "Customer's number"}
+          placeholder={browse ? 'Paste a number, Call-ID or IP, or filter: capture:201 trunk:"Carrier-X" status:5xx' : "Enter the customer's number"}
           className={`${fieldClass} w-full h-8 pl-8 pr-8 font-mono text-xs placeholder:font-sans placeholder:text-[13px]`}
         />
         <kbd className="max-sm:hidden absolute right-2 top-1/2 -translate-y-1/2 px-1 rounded-xs border border-line-2 font-mono text-2xs text-ink-3 pointer-events-none">/</kbd>
@@ -249,10 +251,10 @@ function TopBar({ menuOpen, onMenu }: { menuOpen: boolean; onMenu: () => void })
             ))}
           </ul>
         )}
-      </form> : <div className="flex-1" />}
+      </form>
       <div className="hidden lg:block flex-1" />
-      {traffic && <SourcePicker />}
-      {traffic && <TimePicker />}
+      <SourcePicker />
+      <TimePicker />
     </header>
   );
 }

@@ -1,13 +1,21 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { Check, CircleCheck, CircleX, Copy, KeyRound, Lock, Pencil, Plus, Trash2, X } from "lucide-react";
+import { CircleCheck, CircleX, KeyRound, Lock, Pencil, Plus, Trash2, X } from "lucide-react";
 import { useMemo, useState } from "react";
-import { Badge, Button, Card, Dialog, ErrorNote, Field, KV, Loading, PageHeader, Select, Tabs, Toggle, IconButton, Status, fieldClass, inputClass } from "../components/ui";
+import { Badge, Button, Card, ErrorNote, KV, Loading, PageHeader, Select, Tabs, Toggle, IconButton, Status, fieldClass, inputClass } from "../components/ui";
 import { del, get, post, put } from "../lib/api";
-import { ADMIN_SECTIONS } from "../lib/access";
 import { usePrefs } from "../lib/context";
 import { fmtDateTime } from "../lib/format";
 
+const SECTIONS = [
+  { id: "users", label: "Users", perm: "users_manage" },
+  { id: "roles", label: "Roles & permissions", perm: "roles_manage" },
+  { id: "settings", label: "Settings", perm: "settings_manage" },
+  { id: "storage", label: "Storage", perm: "storage_manage" },
+  { id: "sources", label: "Sources", perm: "system_view" },
+  { id: "system", label: "System health", perm: "system_view" },
+  { id: "audit", label: "Audit log", perm: "audit_read" },
+];
 
 const field = inputClass;
 
@@ -41,7 +49,7 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 export function AdminPage({ section }: { section: string }) {
   const navigate = useNavigate();
   const { can } = usePrefs();
-  const tabs = ADMIN_SECTIONS.filter((s) => can(s.perm));
+  const tabs = SECTIONS.filter((s) => can(s.perm));
   return (
     <div>
       <PageHeader title="Admin" />
@@ -107,7 +115,7 @@ function PermissionOverrides({ catalogue, rolePerms, grants, denies, onChange }:
   );
 }
 
-const blankUser = { id: 0, username: "", display_name: "", email: "", role_id: 0, status: "active", grants: [] as string[], denies: [] as string[], password: "", sso: false };
+const blankUser = { id: 0, username: "", display_name: "", email: "", role_id: 0, status: "active", grants: [] as string[], denies: [] as string[], password: "" };
 
 function Users() {
   const client = useQueryClient();
@@ -146,19 +154,18 @@ function Users() {
       {problem && !editing && !resetFor && <p className="text-crit px-3 pb-2">{problem}</p>}
       <div className="overflow-x-auto">
         <table className="data-table">
-          <thead><tr><th>User</th><th>Sign-in</th><th>Role</th><th>Status</th><th>Overrides</th><th>Last login</th><th /></tr></thead>
+          <thead><tr><th>User</th><th>Role</th><th>Status</th><th>Overrides</th><th>Last login</th><th /></tr></thead>
           <tbody>
             {users.data.map((u: any) => (
               <tr key={u.id}>
                 <td><div className="font-medium">{u.display_name || u.username}</div><div className="text-xs text-ink-3 font-mono">{u.username}</div></td>
-                <td>{u.sso ? <span title={u.linked ? "Linked to the sign-in provider" : "Linked on the first single sign-on"}>Single sign-on</span> : <span className="text-ink-2">Password</span>}</td>
                 <td>{u.role}</td>
-                <td><Status tone={u.locked ? "warn" : u.status === "active" ? "good" : "neutral"}>{u.locked ? "locked" : u.status}</Status></td>
+                <td><Badge tone={u.locked ? "warn" : u.status === "active" ? "good" : "neutral"}>{u.locked ? "locked" : u.status}</Badge></td>
                 <td className="text-ink-2 text-xs">{u.grants.length + u.denies.length === 0 ? "None" : `${u.grants.length} allowed, ${u.denies.length} denied`}</td>
                 <td>{u.last_login ? fmtDateTime(u.last_login, tz).slice(0, 16) : "Never"}</td>
                 <td className="text-right">
                   <Button variant="ghost" onClick={() => { setProblem(""); setEditing({ ...blankUser, ...u, password: "" }); }}><Pencil size={14} />Edit</Button>
-                  {!u.sso && <Button variant="ghost" onClick={() => { setProblem(""); setResetFor(u); }}><KeyRound size={14} />Password</Button>}
+                  <Button variant="ghost" onClick={() => { setProblem(""); setResetFor(u); }}><KeyRound size={14} />Password</Button>
                   {u.id !== me.id && <Button variant="ghost" onClick={() => confirm(`Delete ${u.username}?`) && remove.mutate(u.id)}><Trash2 size={14} /></Button>}
                 </td>
               </tr>
@@ -173,15 +180,10 @@ function Users() {
               <Row label="Username"><input value={editing.username} onChange={(e) => setEditing({ ...editing, username: e.target.value })} className={field} /></Row>
               <Row label="Display name"><input value={editing.display_name} onChange={(e) => setEditing({ ...editing, display_name: e.target.value })} className={field} /></Row>
               <Row label="Email"><input value={editing.email} onChange={(e) => setEditing({ ...editing, email: e.target.value })} className={field} /></Row>
-              {!editing.id && !editing.sso && <Row label={`Password, at least ${settings.password_min_length} characters`}><input type="password" autoComplete="new-password" value={editing.password} onChange={(e) => setEditing({ ...editing, password: e.target.value })} className={field} /></Row>}
+              {!editing.id && <Row label={`Password, at least ${settings.password_min_length} characters`}><input type="password" autoComplete="new-password" value={editing.password} onChange={(e) => setEditing({ ...editing, password: e.target.value })} className={field} /></Row>}
               <Row label="Role"><Select className="w-full" value={String(editing.role_id)} onChange={(v) => setEditing({ ...editing, role_id: Number(v) })} options={roles.data.map((r: any) => ({ value: String(r.id), label: r.name }))} /></Row>
               <Row label="Status"><Select className="w-full" value={editing.status} onChange={(v) => setEditing({ ...editing, status: v })} options={[{ value: "active", label: "Active" }, { value: "disabled", label: "Disabled" }]} /></Row>
             </div>
-            {!editing.id && (
-              <Toggle checked={editing.sso} onChange={(v) => setEditing({ ...editing, sso: v, password: "" })}>
-                Signs in with single sign-on only. The account is linked on the first sign-in with this username.
-              </Toggle>
-            )}
             <PermissionOverrides catalogue={perms.data} rolePerms={role?.permissions ?? []} grants={editing.grants} denies={editing.denies} onChange={(g, d) => setEditing({ ...editing, grants: g, denies: d })} />
             {problem && <p role="alert" className="text-crit">{problem}</p>}
             <Button variant="primary" type="submit" disabled={save.isPending}>Save</Button>
@@ -202,224 +204,82 @@ function Users() {
   );
 }
 
-function RoleDetailsDialog({ initial, roles, onClose, onSaved }: { initial: any; roles: any[]; onClose: () => void; onSaved: (id: number) => void }) {
-  const [role, setRole] = useState(initial);
-  const [problem, setProblem] = useState("");
-  const save = useMutation({
-    mutationFn: (r: any) => (r.id ? put(`/roles/${r.id}`, r) : post("/roles", r)),
-    onSuccess: (res: any) => onSaved(role.id || res.id),
-    onError: (e: Error) => setProblem(e.message),
-  });
-  return (
-    <Dialog
-      title={role.id ? `Edit ${initial.name}` : "New role"}
-      onClose={onClose}
-      width={480}
-      footer={
-        <>
-          <Button onClick={onClose}>Cancel</Button>
-          <Button variant="primary" type="submit" form="role-details" disabled={save.isPending}>{role.id ? "Save" : "Create role"}</Button>
-        </>
-      }
-    >
-      <form id="role-details" className="space-y-3" onSubmit={(e) => { e.preventDefault(); save.mutate(role); }}>
-        <Field label="Name"><input value={role.name} maxLength={64} onChange={(e) => setRole({ ...role, name: e.target.value })} className={inputClass} /></Field>
-        <Field label="Description" hint="Shown next to the role when assigning it to a user.">
-          <textarea value={role.description} maxLength={255} rows={2} onChange={(e) => setRole({ ...role, description: e.target.value })} className={`${fieldClass} block w-full px-2.5 py-1.5`} />
-        </Field>
-        {!role.id && (
-          <Field label="Start from">
-            <Select className="w-full" value={role.from ?? ""} onChange={(v) => setRole({ ...role, from: v, permissions: roles.find((r: any) => String(r.id) === v)?.permissions ?? [] })} options={[{ value: "", label: "No permissions" }, ...roles.map((r: any) => ({ value: String(r.id), label: `Same permissions as ${r.name}` }))]} />
-          </Field>
-        )}
-        {problem && <p role="alert" className="text-crit">{problem}</p>}
-      </form>
-    </Dialog>
-  );
-}
-
 function Roles() {
   const client = useQueryClient();
-  const { can } = usePrefs();
   const roles = useQuery({ queryKey: ["roles"], queryFn: () => get("/roles") });
   const perms = useQuery({ queryKey: ["permissions"], queryFn: () => get("/permissions") });
-  const [view, setView] = useState<"edit" | "compare">("edit");
-  const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [draft, setDraft] = useState<string[] | null>(null);
-  const [dialog, setDialog] = useState<any>(null);
+  const [editing, setEditing] = useState<any>(null);
   const [problem, setProblem] = useState("");
   const refresh = () => client.invalidateQueries({ queryKey: ["roles"] });
   const save = useMutation({
-    mutationFn: (r: any) => put(`/roles/${r.id}`, r),
-    onSuccess: () => { setDraft(null); setProblem(""); refresh(); },
+    mutationFn: (r: any) => (r.id ? put(`/roles/${r.id}`, r) : post("/roles", r)),
+    onSuccess: () => { setEditing(null); setProblem(""); refresh(); },
     onError: (e: Error) => setProblem(e.message),
   });
-  const remove = useMutation({
-    mutationFn: (id: number) => del(`/roles/${id}`),
-    onSuccess: () => { setSelectedId(null); setProblem(""); refresh(); },
-    onError: (e: Error) => setProblem(e.message),
-  });
+  const remove = useMutation({ mutationFn: (id: number) => del(`/roles/${id}`), onSuccess: refresh, onError: (e: Error) => setProblem(e.message) });
 
   if (roles.error) return <ErrorNote error={roles.error} />;
   if (!roles.data || !perms.data) return <Loading />;
-  const list: any[] = roles.data;
-  const catalogue: any[] = perms.data;
-  const groups = [...new Set<string>(catalogue.map((p) => p.group))];
-  const role = list.find((r) => r.id === selectedId) ?? list[0];
-  const current: string[] = draft ?? role.permissions;
-  const changed = draft !== null && (draft.length !== role.permissions.length || draft.some((p) => !role.permissions.includes(p)));
-  const select = (id: number) => {
-    if (changed && !confirm("Discard the unsaved changes to this role?")) return;
-    setSelectedId(id);
-    setDraft(null);
-    setProblem("");
-  };
-  const toggle = (id: string) => setDraft(current.includes(id) ? current.filter((x) => x !== id) : [...current, id]);
-  const toggleGroup = (g: string, on: boolean) => {
-    const ids = catalogue.filter((p) => p.group === g && (!on || can(p.id))).map((p) => p.id);
-    setDraft(on ? [...new Set([...current, ...ids])] : current.filter((x) => !ids.includes(x)));
-  };
+  const groups = [...new Set<string>(perms.data.map((p: any) => p.group))];
+  const toggle = (r: any, id: string) => save.mutate({ ...r, permissions: r.permissions.includes(id) ? r.permissions.filter((x: string) => x !== id) : [...r.permissions, id] });
 
   return (
     <div>
-      <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5 border-b border-line">
-        <p className="text-ink-2 text-xs max-w-[640px]">A role is a named set of permissions. Every user has one role, and can have individual exceptions on the Users tab.</p>
-        <div className="flex items-center gap-2">
-          <div role="group" aria-label="View" className="inline-flex rounded-md border border-line-2 p-0.5">
-            {(["edit", "compare"] as const).map((v) => (
-              <button key={v} type="button" aria-pressed={view === v} onClick={() => setView(v)} className={`h-6 px-2.5 rounded-sm text-xs font-medium ${view === v ? "bg-accent-wash text-ink" : "text-ink-2 hover:text-ink"}`}>
-                {v === "edit" ? "Edit" : "Compare"}
-              </button>
-            ))}
-          </div>
-          <Button variant="primary" size="sm" onClick={() => setDialog({ id: 0, name: "", description: "", permissions: [] })}><Plus size={14} />New role</Button>
-        </div>
+      <div className="flex items-center justify-between px-3 py-2">
+        <span className="text-ink-3 text-xs">Tick a box to change a role. It takes effect at once. Users can also have individual overrides.</span>
+        <Button variant="primary" onClick={() => { setProblem(""); setEditing({ id: 0, name: "", description: "", permissions: [] }); }}><Plus size={14} />New role</Button>
       </div>
-      {problem && <p role="alert" className="text-crit px-3 pt-2">{problem}</p>}
-
-      {view === "compare" ? (
-        <div className="overflow-x-auto">
-          <table className="data-table table-fixed min-w-[720px]">
-            <colgroup>
-              <col className="w-[300px]" />
-              {list.map((r) => <col key={r.id} />)}
-            </colgroup>
-            <thead>
-              <tr>
-                <th>Permission</th>
-                {list.map((r) => (
-                  <th key={r.id} className="!text-center">
-                    <button type="button" onClick={() => { select(r.id); setView("edit"); }} className="font-semibold text-ink hover:underline">{r.name}</button>
-                    <div className="font-normal text-ink-3 tnum">{r.users} {r.users === 1 ? "user" : "users"}</div>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {groups.map((g) => [
-                <tr key={g} className="pointer-events-none"><td colSpan={list.length + 1} className="!bg-sunken !py-1 text-2xs font-semibold uppercase tracking-[0.06em] text-ink-3">{g}</td></tr>,
-                ...catalogue.filter((p) => p.group === g).map((p) => (
-                  <tr key={p.id}>
-                    <td className="!whitespace-normal" title={p.help}>{p.label}</td>
-                    {list.map((r) => (
-                      <td key={r.id} className="text-center">
-                        {r.permissions.includes(p.id) ? <Check size={16} className="inline text-accent" aria-label="Allowed" /> : <span className="text-ink-3" aria-label="Not allowed">–</span>}
-                      </td>
-                    ))}
-                  </tr>
-                )),
-              ])}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <div className="grid md:grid-cols-[260px_minmax(0,1fr)]">
-          <nav aria-label="Roles" className="md:border-r border-b md:border-b-0 border-line py-1.5">
-            {list.map((r) => {
-              const on = r.id === role.id;
-              return (
-                <button
-                  key={r.id}
-                  type="button"
-                  aria-current={on ? "true" : undefined}
-                  onClick={() => select(r.id)}
-                  className={`w-full text-left pl-2.5 pr-3 py-2 border-l-2 focus-visible:-outline-offset-2 ${on ? "border-accent bg-accent-wash" : "border-transparent hover:bg-hover"}`}
-                >
-                  <span className="flex items-center gap-1.5">
-                    <span className="font-medium truncate">{r.name}</span>
-                    {r.locked && <Lock size={12} className="text-ink-3 shrink-0" aria-label="Fixed role" />}
-                    <span className="ml-auto text-xs text-ink-3 tnum shrink-0">{r.users} {r.users === 1 ? "user" : "users"}</span>
-                  </span>
-                  <span className="text-xs text-ink-3 line-clamp-2">{r.description || "No description"}</span>
-                </button>
-              );
-            })}
-          </nav>
-          <section className="min-w-0" aria-label={`Permissions of ${role.name}`}>
-            <header className="flex flex-wrap items-start justify-between gap-3 px-4 py-3 border-b border-line">
-              <div className="min-w-0">
-                <h2 className="text-md font-semibold">{role.name}</h2>
-                <p className="text-ink-2 max-w-[70ch]">{role.description || "No description"}</p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {!role.locked && <Button size="sm" onClick={() => setDialog(role)}><Pencil size={14} />Rename</Button>}
-                <Button size="sm" onClick={() => setDialog({ id: 0, name: `${role.name} copy`, description: role.description, permissions: role.permissions, from: String(role.id) })}><Copy size={14} />Duplicate</Button>
-                {!role.locked && (
-                  <Button size="sm" variant="danger" disabled={role.users > 0} title={role.users > 0 ? "Move its users to another role first" : undefined} onClick={() => confirm(`Delete the role ${role.name}?`) && remove.mutate(role.id)}>
-                    <Trash2 size={14} />Delete
-                  </Button>
-                )}
-              </div>
-            </header>
-            {role.locked && (
-              <p className="flex items-center gap-2 mx-4 mt-3 px-3 py-2 rounded-md bg-info-wash text-info text-xs"><Lock size={14} aria-hidden />This role always has every permission, so the system can't be left without an administrator.</p>
+      {problem && !editing && <p className="text-crit px-3 pb-2">{problem}</p>}
+      <div className="overflow-x-auto">
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>Permission</th>
+              {roles.data.map((r: any) => (
+                <th key={r.id} className="text-center !whitespace-normal min-w-[92px]">
+                  <div className="font-semibold text-ink">{r.name}</div>
+                  <div className="font-normal">{r.users} users</div>
+                  {r.locked ? <Lock size={11} className="inline mt-0.5" aria-label="Locked" /> : (
+                    <span className="inline-flex gap-1 mt-0.5">
+                      <button type="button" aria-label={`Edit ${r.name}`} title="Rename or describe" onClick={() => { setProblem(""); setEditing(r); }} className="hover:text-ink"><Pencil size={11} /></button>
+                      <button type="button" aria-label={`Delete ${r.name}`} title="Delete" onClick={() => confirm(`Delete role ${r.name}?`) && remove.mutate(r.id)} className="hover:text-crit"><Trash2 size={11} /></button>
+                    </span>
+                  )}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {groups.map((g) => [
+              <tr key={g}><td colSpan={roles.data.length + 1} className="!bg-sunken text-xs font-medium text-ink-2">{g}</td></tr>,
+              ...perms.data.filter((p: any) => p.group === g).map((p: any) => (
+                <tr key={p.id}>
+                  <td title={p.help}><div>{p.label}</div><div className="text-xs text-ink-3 whitespace-normal max-w-[340px]">{p.help}</div></td>
+                  {roles.data.map((r: any) => (
+                    <td key={r.id} className="text-center">
+                      <input type="checkbox" aria-label={`${p.label} for ${r.name}`} checked={r.permissions.includes(p.id)} disabled={r.locked} onChange={() => toggle(r, p.id)} />
+                    </td>
+                  ))}
+                </tr>
+              )),
+            ])}
+          </tbody>
+        </table>
+      </div>
+      {editing && (
+        <SidePanel title={editing.id ? `Edit ${editing.name}` : "New role"} onClose={() => setEditing(null)}>
+          <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); save.mutate(editing); }}>
+            <Row label="Name"><input autoFocus value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} className={field} /></Row>
+            <Row label="Description"><input value={editing.description} onChange={(e) => setEditing({ ...editing, description: e.target.value })} className={field} /></Row>
+            {!editing.id && (
+              <Row label="Start from">
+                <Select className="w-full" value="" onChange={(v) => setEditing({ ...editing, permissions: roles.data.find((r: any) => String(r.id) === v)?.permissions ?? [] })} options={[{ value: "", label: "No permissions" }, ...roles.data.map((r: any) => ({ value: String(r.id), label: `Copy of ${r.name}` }))]} />
+              </Row>
             )}
-            <div className="px-4 pb-2">
-              {groups.map((g) => {
-                const items = catalogue.filter((p) => p.group === g);
-                const all = items.every((p) => current.includes(p.id));
-                return (
-                  <fieldset key={g} className="mt-3">
-                    <div className="flex items-center justify-between h-7 border-b border-line">
-                      <legend className="text-2xs font-semibold uppercase tracking-[0.06em] text-ink-3">{g}</legend>
-                      {!role.locked && (
-                        <button type="button" onClick={() => toggleGroup(g, !all)} className="text-xs text-accent hover:underline">{all ? "Clear all" : "Select all"}</button>
-                      )}
-                    </div>
-                    {items.map((p) => {
-                      const mine = can(p.id);
-                      const on = current.includes(p.id);
-                      return (
-                        <label key={p.id} className={`flex items-start gap-3 py-2 border-b border-line last:border-b-0 ${role.locked ? "" : "cursor-pointer hover:bg-hover"} -mx-2 px-2`}>
-                          <span className="flex-1 min-w-0">
-                            <span className="block font-medium">{p.label}</span>
-                            <span className="block text-xs text-ink-3">{p.help}</span>
-                          </span>
-                          <input type="checkbox" className="mt-1" checked={on} disabled={role.locked || (!on && !mine)} title={!on && !mine ? "Your account doesn't have this permission, so you can't grant it" : undefined} onChange={() => toggle(p.id)} aria-label={`${p.label} for ${role.name}`} />
-                        </label>
-                      );
-                    })}
-                  </fieldset>
-                );
-              })}
-            </div>
-            {!role.locked && (
-              <footer className="sticky bottom-0 flex items-center justify-end gap-2 px-4 py-2.5 border-t border-line bg-surface">
-                <span className="mr-auto text-xs text-ink-3">{changed ? "Unsaved changes. They apply to every user with this role." : `${current.length} of ${catalogue.length} permissions`}</span>
-                <Button size="sm" onClick={() => setDraft(null)} disabled={!changed}>Discard</Button>
-                <Button size="sm" variant="primary" onClick={() => save.mutate({ ...role, permissions: current })} disabled={!changed || save.isPending}>Save changes</Button>
-              </footer>
-            )}
-          </section>
-        </div>
-      )}
-      {dialog && (
-        <RoleDetailsDialog
-          initial={dialog}
-          roles={list}
-          onClose={() => setDialog(null)}
-          onSaved={(id) => { setDialog(null); setDraft(null); setSelectedId(id); setView("edit"); refresh(); }}
-        />
+            {problem && <p role="alert" className="text-crit">{problem}</p>}
+            <Button variant="primary" type="submit">Save</Button>
+          </form>
+        </SidePanel>
       )}
     </div>
   );
@@ -434,8 +294,7 @@ function SettingRow({ s, onSaved }: { s: any; onSaved: () => void }) {
     onSuccess: () => { setProblem(""); onSaved(); },
     onError: (e: Error) => setProblem(e.message),
   });
-  // A secret is never sent back, so the field starts empty and only a typed value replaces it.
-  const commit = (v: string) => (s.secret ? v !== "" && save.mutate(v) : v !== s.value && save.mutate(v));
+  const commit = (v: string) => v !== s.value && save.mutate(v);
   const helpId = `setting-${s.key}-help`;
   return (
     <div className="grid md:grid-cols-[1fr_260px] gap-x-4 gap-y-1 px-3 py-2.5 border-b border-line last:border-b-0">
@@ -453,37 +312,19 @@ function SettingRow({ s, onSaved }: { s: any; onSaved: () => void }) {
         ) : s.kind === "choice" ? (
           <Select label={s.label} className="w-full" value={value} onChange={(v) => { setValue(v); save.mutate(v); }} options={s.options.map((o: string) => ({ value: o, label: o }))} />
         ) : (
-          <input aria-label={s.label} aria-describedby={helpId} disabled={locked} autoComplete="off" placeholder={s.secret ? (s.set ? "Saved. Type to replace it" : "Not set") : undefined} type={s.secret ? "password" : s.kind === "string" ? "text" : "number"} min={s.min ?? undefined} max={s.max ?? undefined} value={value} onChange={(e) => setValue(e.target.value)} onBlur={() => commit(value)} onKeyDown={(e) => e.key === "Enter" && commit(value)} className={`${field} disabled:opacity-60`} />
+          <input aria-label={s.label} aria-describedby={helpId} disabled={locked} type={s.kind === "string" ? "text" : "number"} min={s.min ?? undefined} max={s.max ?? undefined} value={value} onChange={(e) => setValue(e.target.value)} onBlur={() => commit(value)} onKeyDown={(e) => e.key === "Enter" && commit(value)} className={`${field} disabled:opacity-60`} />
         )}
         <div className="flex items-center gap-2 mt-1 text-xs text-ink-3">
           {locked ? <span><Lock size={10} className="inline -mt-0.5 mr-0.5" aria-hidden />Set by environment variable</span> : s.source === "database" ? (
             <>
               <span>Saved in database</span>
-              <button type="button" onClick={() => { setValue(s.secret ? "" : s.default); save.mutate(null); }} className="text-accent hover:underline">{s.secret ? "Remove" : "Reset to default"}</button>
+              <button type="button" onClick={() => { setValue(s.default); save.mutate(null); }} className="text-accent hover:underline">Reset to default</button>
             </>
           ) : <span>Default</span>}
           {save.isSuccess && <span className="text-good">Saved</span>}
         </div>
         {problem && <p role="alert" className="text-crit text-xs mt-1">{problem}</p>}
       </div>
-    </div>
-  );
-}
-
-/** The redirect URL to register with the provider, and a check that the provider is reachable. */
-function SsoHelp() {
-  const check = useMutation({ mutationFn: () => post("/admin/sso/check") });
-  const redirect = `${window.location.origin}/api/v1/auth/sso/callback`;
-  return (
-    <div className="mx-3 mt-2.5 p-3 rounded-md border border-line bg-sunken">
-      <div className="text-xs font-medium text-ink-2">Redirect URL to register with your provider</div>
-      <div className="flex items-center gap-2 mt-1">
-        <code className="flex-1 min-w-0 truncate font-mono text-xs">{redirect}</code>
-        <Button size="sm" onClick={() => navigator.clipboard?.writeText(redirect)}><Copy size={14} />Copy</Button>
-        <Button size="sm" onClick={() => check.mutate()} disabled={check.isPending}>Check provider</Button>
-      </div>
-      {check.isSuccess && <p className="mt-2 text-xs text-good">Reached {check.data.issuer}: {check.data.keys} signing {check.data.keys === 1 ? "key" : "keys"} published.</p>}
-      {check.isError && <p role="alert" className="mt-2 text-xs text-crit">{(check.error as Error).message}</p>}
     </div>
   );
 }
@@ -508,7 +349,6 @@ function SettingsPanel() {
       </nav>
       <div className="flex-1 min-w-0">
         <p className="text-ink-3 text-xs px-3 pt-2.5">Every setting can also be set with its environment variable, which then takes priority over the value here.</p>
-        {group === "Single sign-on" && <SsoHelp />}
         {data.filter((s: any) => s.group === group).map((s: any) => <SettingRow key={s.key} s={s} onSaved={refresh} />)}
       </div>
     </div>
@@ -550,7 +390,7 @@ function Storage() {
         <p className="text-ink-2 text-xs max-w-[720px]">Where captured data lives. The built-in Local file storage works out of the box; add a ClickHouse server when you need more. Selecting a storage creates its tables if needed, and new traffic is written there.</p>
         <Button variant="primary" onClick={() => { setProblem(""); setEditing({ ...blankStorage }); }}><Plus size={14} />Add storage</Button>
       </div>
-      {!data.encryption_key_set && <p className="text-warn text-xs px-3 pb-2">SS_SECRET_KEY isn't set, so storage passwords are kept unencrypted in MariaDB.</p>}
+      {!data.encryption_key_set && <p className="text-warn text-xs px-3 pb-2">VP_SECRET_KEY isn't set, so storage passwords are kept unencrypted in MariaDB.</p>}
       {problem && !editing && <p className="text-crit px-3 pb-2">{problem}</p>}
       <div className="px-3 pb-3 space-y-2">
         {data.storages.map((s: any) => {
