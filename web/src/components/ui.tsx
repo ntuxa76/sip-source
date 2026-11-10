@@ -4,10 +4,10 @@ import { mosVerdict } from "../lib/format";
 
 export function Card({ title, right, children, className = "" }: { title?: ReactNode; right?: ReactNode; children: ReactNode; className?: string }) {
   return (
-    <section className={`bg-surface border border-line rounded-lg ${className}`}>
+    <section className={`bg-surface border border-line rounded-xl shadow-card ${className}`}>
       {(title || right) && (
-        <header className="flex items-center justify-between gap-3 px-3.5 pt-2.5 pb-1.5">
-          <h2 className="font-semibold text-[13px] text-ink">{title}</h2>
+        <header className="flex items-center justify-between gap-3 px-4 pt-3.5 pb-2">
+          <h2 className="font-semibold text-[14px] text-ink tracking-tight">{title}</h2>
           <div className="flex items-center gap-2 text-ink-3 text-xs">{right}</div>
         </header>
       )}
@@ -18,9 +18,9 @@ export function Card({ title, right, children, className = "" }: { title?: React
 
 export function PageHeader({ title, description, right }: { title: string; description?: ReactNode; right?: ReactNode }) {
   return (
-    <div className="flex items-end justify-between gap-4 mb-3.5">
+    <div className="flex items-end justify-between gap-4 mb-4">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
+        <h1 className="text-[22px] leading-7 font-semibold tracking-tight">{title}</h1>
         {description && <p className="text-ink-2 mt-0.5">{description}</p>}
       </div>
       {right}
@@ -41,7 +41,7 @@ const toneClass: Record<Tone, string> = {
 
 export function Badge({ tone = "neutral", children, title, mono }: { tone?: Tone; children: ReactNode; title?: string; mono?: boolean }) {
   return (
-    <span title={title} className={`inline-flex items-center gap-1 rounded px-1.5 py-px text-[11.5px] font-medium whitespace-nowrap ${toneClass[tone]} ${mono ? "font-mono" : ""}`}>
+    <span title={title} className={`inline-flex items-center gap-1 rounded-full px-2 py-px text-[11.5px] font-medium whitespace-nowrap ${toneClass[tone]} ${mono ? "font-mono" : ""}`}>
       {children}
     </span>
   );
@@ -128,12 +128,12 @@ export function RegStatus({ status }: { status: string }) {
 
 export function Button({ children, variant = "default", className = "", ...rest }: ComponentProps<"button"> & { variant?: "default" | "primary" | "ghost" }) {
   const styles = {
-    default: "bg-raised border border-line-2 hover:bg-sunken text-ink",
-    primary: "bg-accent border border-accent text-white hover:opacity-90",
-    ghost: "text-ink-2 hover:bg-sunken",
+    default: "bg-raised border border-line-2 shadow-card hover:bg-sunken text-ink",
+    primary: "bg-ink border border-ink text-page hover:opacity-85",
+    ghost: "text-ink-2 hover:bg-sunken hover:text-ink",
   };
   return (
-    <button {...rest} className={`inline-flex items-center gap-1.5 rounded-md px-2.5 h-7 text-[12.5px] font-medium disabled:opacity-50 ${styles[variant]} ${className}`}>
+    <button {...rest} className={`inline-flex items-center gap-1.5 rounded-lg px-3 h-8 text-[12.5px] font-medium disabled:opacity-50 ${styles[variant]} ${className}`}>
       {children}
     </button>
   );
@@ -141,18 +141,20 @@ export function Button({ children, variant = "default", className = "", ...rest 
 
 export function Tabs({ tabs, active, onChange }: { tabs: { id: string; label: ReactNode }[]; active: string; onChange: (id: string) => void }) {
   return (
-    <div role="tablist" className="flex gap-0.5 border-b border-line overflow-x-auto overflow-y-hidden">
-      {tabs.map((t) => (
-        <button
-          key={t.id}
-          role="tab"
-          aria-selected={active === t.id}
-          onClick={() => onChange(t.id)}
-          className={`px-3 py-2 text-[13px] whitespace-nowrap -mb-px border-b-2 ${active === t.id ? "border-accent text-ink font-medium" : "border-transparent text-ink-2 hover:text-ink"}`}
-        >
-          {t.label}
-        </button>
-      ))}
+    <div className="overflow-x-auto overflow-y-hidden">
+      <div role="tablist" className="inline-flex gap-0.5 p-0.5 rounded-lg bg-sunken border border-line">
+        {tabs.map((t) => (
+          <button
+            key={t.id}
+            role="tab"
+            aria-selected={active === t.id}
+            onClick={() => onChange(t.id)}
+            className={`px-3 h-7 rounded-md text-[12.5px] whitespace-nowrap ${active === t.id ? "bg-raised text-ink font-medium shadow-card" : "text-ink-2 hover:text-ink"}`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
@@ -180,7 +182,7 @@ export function KV({ label, children, mono }: { label: string; children: ReactNo
 
 export function Select({ value, onChange, options, label, className = "" }: { value: string; onChange: (v: string) => void; options: { value: string; label: string }[]; label?: string; className?: string }) {
   return (
-    <select aria-label={label} value={value} onChange={(e) => onChange(e.target.value)} className={`h-7 rounded-md bg-raised border border-line-2 px-1.5 text-[12.5px] text-ink ${className}`}>
+    <select aria-label={label} value={value} onChange={(e) => onChange(e.target.value)} className={`h-8 rounded-lg bg-raised border border-line-2 px-2 text-[12.5px] text-ink ${className}`}>
       {options.map((o) => (
         <option key={o.value} value={o.value}>
           {o.label}

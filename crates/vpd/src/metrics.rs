@@ -300,7 +300,8 @@ pub fn generated_sql(m: &M, q: &Query, shape: &str) -> String {
     if shape == "top" {
         let key = series.unwrap_or_else(|| "'all'".to_string());
         let dir = if q.order.as_deref() == Some("asc") { "ASC" } else { "DESC" };
-        let not_empty = "\nHAVING key != ''";
+        // Zero means "none" for codes such as the Q.850 cause.
+        let not_empty = "\nHAVING key NOT IN ('', '0')";
         return format!("SELECT {key} AS key,\n       {value} AS value{samples}\nFROM {table}\nWHERE {where_}\nGROUP BY key{not_empty}\nORDER BY value {dir}\nLIMIT {}", q.top.unwrap_or(10));
     }
     let (series_select, series_group) = match &series {
@@ -407,6 +408,10 @@ pub fn shape(t: &Table, q: &Query, from: i64, to: i64, tz: Tz, meta: Value, now:
                 }
             }
             let total_of = |n: &String| values[n].iter().flatten().sum::<f64>();
+            // A series that is zero everywhere only adds a legend entry.
+            if zero_fill && order.len() > 1 {
+                order.retain(|n| total_of(n) != 0.0);
+            }
             order.sort_by(|a, b| total_of(b).total_cmp(&total_of(a)));
             let limit = q.top.unwrap_or(opts.top_series).clamp(1, opts.top_series);
             let folded = order.len() > limit;

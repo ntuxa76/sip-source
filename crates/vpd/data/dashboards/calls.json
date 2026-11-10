@@ -30,7 +30,7 @@
         "x": 0,
         "y": 0,
         "w": 6,
-        "h": 3
+        "h": 4
       },
       "query": {
         "mode": "metric",
@@ -46,7 +46,7 @@
         "x": 6,
         "y": 0,
         "w": 6,
-        "h": 3
+        "h": 4
       },
       "query": {
         "mode": "metric",
@@ -62,7 +62,7 @@
         "x": 12,
         "y": 0,
         "w": 6,
-        "h": 3
+        "h": 4
       },
       "query": {
         "mode": "metric",
@@ -78,7 +78,7 @@
         "x": 18,
         "y": 0,
         "w": 6,
-        "h": 3
+        "h": 4
       },
       "query": {
         "mode": "metric",
@@ -92,7 +92,7 @@
       "title": "Attempts by direction",
       "gridPos": {
         "x": 0,
-        "y": 3,
+        "y": 4,
         "w": 12,
         "h": 9
       },
@@ -111,7 +111,7 @@
       "title": "Erlangs by trunk",
       "gridPos": {
         "x": 12,
-        "y": 3,
+        "y": 4,
         "w": 12,
         "h": 9
       },
@@ -130,7 +130,7 @@
       "title": "Status codes over time",
       "gridPos": {
         "x": 0,
-        "y": 12,
+        "y": 13,
         "w": 24,
         "h": 12
       },
@@ -147,7 +147,7 @@
       "title": "Q.850 causes",
       "gridPos": {
         "x": 0,
-        "y": 24,
+        "y": 25,
         "w": 8,
         "h": 9
       },
@@ -166,7 +166,7 @@
       "title": "End causes",
       "gridPos": {
         "x": 8,
-        "y": 24,
+        "y": 25,
         "w": 8,
         "h": 9
       },
@@ -185,7 +185,7 @@
       "title": "Top callers by volume",
       "gridPos": {
         "x": 16,
-        "y": 24,
+        "y": 25,
         "w": 8,
         "h": 9
       },

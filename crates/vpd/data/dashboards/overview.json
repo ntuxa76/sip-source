@@ -30,7 +30,7 @@
         "x": 0,
         "y": 0,
         "w": 4,
-        "h": 3
+        "h": 4
       },
       "query": {
         "mode": "metric",
@@ -46,7 +46,7 @@
         "x": 4,
         "y": 0,
         "w": 4,
-        "h": 3
+        "h": 4
       },
       "query": {
         "mode": "metric",
@@ -62,7 +62,7 @@
         "x": 8,
         "y": 0,
         "w": 4,
-        "h": 3
+        "h": 4
       },
       "query": {
         "mode": "metric",
@@ -78,7 +78,7 @@
         "x": 12,
         "y": 0,
         "w": 4,
-        "h": 3
+        "h": 4
       },
       "query": {
         "mode": "metric",
@@ -94,7 +94,7 @@
         "x": 16,
         "y": 0,
         "w": 4,
-        "h": 3
+        "h": 4
       },
       "query": {
         "mode": "metric",
@@ -110,7 +110,7 @@
         "x": 20,
         "y": 0,
         "w": 4,
-        "h": 3
+        "h": 4
       },
       "query": {
         "mode": "metric",
@@ -124,7 +124,7 @@
       "title": "ASR by trunk",
       "gridPos": {
         "x": 0,
-        "y": 3,
+        "y": 4,
         "w": 16,
         "h": 9
       },
@@ -142,12 +142,32 @@
       }
     },
     {
+      "id": 15,
+      "type": "top",
+      "title": "How calls ended",
+      "gridPos": {
+        "x": 16,
+        "y": 4,
+        "w": 8,
+        "h": 9
+      },
+      "query": {
+        "mode": "metric",
+        "metric": "attempts",
+        "groupBy": "end_cause"
+      },
+      "options": {
+        "top": 8,
+        "description": "Calls in the range by end cause: hangups, busy, no answer, rejections and timeouts."
+      }
+    },
+    {
       "id": 9,
       "type": "timeseries",
       "title": "Failures by status class",
       "gridPos": {
         "x": 0,
-        "y": 12,
+        "y": 13,
         "w": 12,
         "h": 9
       },
@@ -166,7 +186,7 @@
       "title": "Concurrent calls by direction",
       "gridPos": {
         "x": 12,
-        "y": 12,
+        "y": 13,
         "w": 12,
         "h": 9
       },
@@ -185,7 +205,7 @@
       "title": "Top failing trunks",
       "gridPos": {
         "x": 0,
-        "y": 21,
+        "y": 22,
         "w": 6,
         "h": 9
       },
@@ -204,7 +224,7 @@
       "title": "Top failing destinations",
       "gridPos": {
         "x": 6,
-        "y": 21,
+        "y": 22,
         "w": 6,
         "h": 9
       },
@@ -223,7 +243,7 @@
       "title": "MOS distribution",
       "gridPos": {
         "x": 12,
-        "y": 21,
+        "y": 22,
         "w": 6,
         "h": 9
       },
@@ -239,7 +259,7 @@
       "title": "HEP packets/s",
       "gridPos": {
         "x": 18,
-        "y": 21,
+        "y": 22,
         "w": 6,
         "h": 9
       },

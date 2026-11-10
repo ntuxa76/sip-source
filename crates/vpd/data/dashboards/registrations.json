@@ -30,7 +30,7 @@
         "x": 0,
         "y": 0,
         "w": 6,
-        "h": 3
+        "h": 4
       },
       "query": {
         "mode": "metric",
@@ -46,7 +46,7 @@
         "x": 6,
         "y": 0,
         "w": 6,
-        "h": 3
+        "h": 4
       },
       "query": {
         "mode": "metric",
@@ -62,7 +62,7 @@
         "x": 12,
         "y": 0,
         "w": 6,
-        "h": 3
+        "h": 4
       },
       "query": {
         "mode": "metric",
@@ -78,7 +78,7 @@
         "x": 18,
         "y": 0,
         "w": 6,
-        "h": 3
+        "h": 4
       },
       "query": {
         "mode": "metric",
@@ -92,7 +92,7 @@
       "title": "Active registrations by group",
       "gridPos": {
         "x": 0,
-        "y": 3,
+        "y": 4,
         "w": 12,
         "h": 9
       },
@@ -111,7 +111,7 @@
       "title": "Failures by code",
       "gridPos": {
         "x": 12,
-        "y": 3,
+        "y": 4,
         "w": 12,
         "h": 9
       },
@@ -130,7 +130,7 @@
       "title": "Attempts per second by group",
       "gridPos": {
         "x": 0,
-        "y": 12,
+        "y": 13,
         "w": 12,
         "h": 9
       },
@@ -149,7 +149,7 @@
       "title": "Top failing AoRs",
       "gridPos": {
         "x": 12,
-        "y": 12,
+        "y": 13,
         "w": 12,
         "h": 9
       },

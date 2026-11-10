@@ -248,13 +248,13 @@ pub async fn seed(pool: &MySqlPool) -> Result<(), sqlx::Error> {
         set_marker(pool, "_seeded_dashboards").await?;
     }
     // Dashboards nobody edited pick up the panels that work on captured data.
-    if !marker(pool, "_dashboards_v3").await? {
+    if !marker(pool, "_dashboards_v4").await? {
         for d in built_in_dashboards() {
             sqlx::query("UPDATE dashboards SET title = ?, description = ?, body = ?, updated_at = ? WHERE uid = ? AND version = 1 AND updated_by = 'system'")
                 .bind(d["title"].as_str().unwrap_or("")).bind(d["description"].as_str().unwrap_or("")).bind(d.to_string()).bind(utc_now()).bind(d["uid"].as_str().unwrap_or(""))
                 .execute(pool).await?;
         }
-        set_marker(pool, "_dashboards_v3").await?;
+        set_marker(pool, "_dashboards_v4").await?;
     }
     Ok(())
 }

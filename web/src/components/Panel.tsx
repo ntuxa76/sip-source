@@ -7,7 +7,7 @@ import type { Call, MetricQuery, TimeSeriesResult } from "../lib/api";
 import { rangeParam, usePrefs, useRange } from "../lib/context";
 import type { PanelDef } from "../lib/dashboard";
 import { downloadBlob, fmtDateTime, fmtDuration, fmtHMS, formatMetric, metricText } from "../lib/format";
-import { BarList, HeatChart, Histogram, Sparkline, TimeChart } from "./charts";
+import { BarList, HeatChart, Histogram, MiniBars, TimeChart } from "./charts";
 import { Card, Empty, ErrorNote, FindingBadge, Loading, MosCell, RegStatus, StatusChip } from "./ui";
 
 export interface PanelContext {
@@ -153,9 +153,9 @@ function EditActions({ ctx }: { ctx: PanelContext }) {
 
 function PanelFrame({ panel, ctx, height, info, actions, children }: { panel: PanelDef; ctx: PanelContext; height: number; info?: string; actions?: React.ReactNode; children: React.ReactNode }) {
   return (
-    <section className={`group/panel bg-surface border rounded-lg flex flex-col overflow-hidden ${ctx.onEdit ? "border-line-2" : "border-line"}`} style={{ height }} title={panel.options.description}>
-      <header className={`flex items-center justify-between gap-3 px-3.5 pt-2.5 pb-1 shrink-0 ${ctx.onEdit ? "panel-drag cursor-move" : ""}`}>
-        <h2 className="font-semibold text-[13px] truncate">{panel.title}</h2>
+    <section className={`group/panel bg-surface border rounded-xl shadow-card flex flex-col overflow-hidden ${ctx.onEdit ? "border-line-2" : "border-line"}`} style={{ height }} title={panel.options.description}>
+      <header className={`flex items-center justify-between gap-3 px-4 pt-3 pb-1 shrink-0 ${ctx.onEdit ? "panel-drag cursor-move" : ""}`}>
+        <h2 className="font-semibold text-[14px] tracking-tight truncate">{panel.title}</h2>
         <div className="flex items-center gap-1 text-ink-3 text-xs shrink-0">
           <span className={`items-center gap-0.5 ${ctx.onEdit ? "flex" : "hidden group-hover/panel:flex group-focus-within/panel:flex"}`}>
             {actions}
@@ -179,31 +179,38 @@ function StatPanel({ panel, ctx, height }: { panel: PanelDef; ctx: PanelContext;
   const delta = d && d.total !== null && d.previous !== null && d.previous !== 0 ? ((d.total - d.previous) / Math.abs(d.previous)) * 100 : null;
   const good = delta === null || !d || d.metric.better === "none" || Math.abs(delta) < 0.5 ? null : delta > 0 === (d.metric.better === "higher");
   const spark = d?.series.length ? d.buckets.map((_, i) => d.series[0].values[i]).slice(0, d.partial_from ?? undefined) : [];
+  const DeltaIcon = delta !== null && delta < 0 ? ArrowDownRight : ArrowUpRight;
+  const deltaTone = good === null ? "bg-ink-3" : good ? "bg-good" : "bg-crit";
+  // Tall cards put the bar strip under the number, as wide as the card.
+  const tall = height >= 110;
   return (
-    <section className={`group/panel relative bg-surface border rounded-lg px-3.5 py-2.5 overflow-hidden ${ctx.onEdit ? "border-line-2" : "border-line"}`} style={{ height }} title={panel.options.description ?? d?.metric.description}>
+    <section className={`group/panel relative bg-surface border rounded-xl shadow-card px-4 pt-3 pb-3 overflow-hidden flex flex-col ${ctx.onEdit ? "border-line-2" : "border-line"}`} style={{ height }} title={panel.options.description ?? d?.metric.description}>
       <div className={`flex items-center justify-between gap-2 ${ctx.onEdit ? "panel-drag cursor-move" : ""}`}>
-        <div className="text-ink-2 text-xs truncate">{panel.title}</div>
+        <div className="text-[13px] font-medium text-ink-2 truncate">{panel.title}</div>
         <span className={`items-center gap-0.5 -my-1 ${ctx.onEdit ? "flex" : "hidden"}`}><EditActions ctx={ctx} /></span>
       </div>
       {error ? (
         <div className="text-crit text-xs mt-1 line-clamp-2">{(error as Error).message}</div>
       ) : (
-        <div className="flex items-end justify-between gap-2 mt-1">
-          <div className="min-w-0">
-            <div className="text-2xl font-semibold tracking-tight leading-7">
+        <div className={tall ? "flex flex-col flex-1 min-h-0" : "flex items-end gap-3 flex-1 min-h-0"}>
+          <div className={`min-w-0 ${tall ? "flex items-baseline gap-2.5 flex-wrap" : "flex-1"}`}>
+            <div className="text-[26px] font-semibold tracking-tight leading-8 whitespace-nowrap mt-0.5">
               {f?.value ?? "…"}
-              {f?.unit && <span className="text-sm font-medium text-ink-2 ml-1">{f.unit}</span>}
+              {f?.unit && <span className="text-sm font-medium text-ink-3 ml-1">{f.unit}</span>}
             </div>
-            <div className="h-4 text-[11.5px] tnum whitespace-nowrap">
+            <div className="flex items-center gap-1 text-[11.5px] tnum whitespace-nowrap min-w-0 h-4">
               {delta !== null && (
-                <span className={good === null ? "text-ink-3" : good ? "text-good" : "text-crit"}>
-                  {delta >= 0 ? <ArrowUpRight size={12} className="inline -mt-0.5" /> : <ArrowDownRight size={12} className="inline -mt-0.5" />}
-                  {Math.abs(delta).toFixed(1)}%<span className="text-ink-3"> vs prev</span>
-                </span>
+                <>
+                  <span className={`w-3.5 h-3.5 rounded-full flex items-center justify-center text-white shrink-0 ${deltaTone}`}><DeltaIcon size={10} strokeWidth={3} aria-hidden /></span>
+                  <span className="font-semibold text-ink">{Math.abs(delta).toFixed(1)}%</span>
+                  <span className="text-ink-3 truncate">vs previous</span>
+                </>
               )}
             </div>
           </div>
-          <Sparkline values={spark} />
+          <div className={tall ? "mt-auto pt-2" : "w-[112px] shrink-0 pb-0.5"}>
+            <MiniBars values={spark} unit={unit} count={tall ? 12 : 8} height={tall ? Math.min(40, height - 96) : 30} />
+          </div>
         </div>
       )}
     </section>

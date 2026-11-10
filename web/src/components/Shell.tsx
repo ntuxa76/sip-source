@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, Outlet, useNavigate, useRouterState, useSearch } from "@tanstack/react-router";
-import { BarChart3, ChevronLeft, ChevronRight, CircleUserRound, Compass, Database, LayoutDashboard, LogOut, Moon, Radio, RefreshCw, Search, Settings, Sun, Users } from "lucide-react";
+import { BarChart3, ChevronLeft, ChevronRight, Compass, Database, LayoutDashboard, LogOut, Moon, Radio, RefreshCw, Search, Settings, Sun, Users } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { get, post } from "../lib/api";
@@ -20,16 +20,41 @@ const ADMIN_SECTIONS: [string, string][] = [
 function useNav() {
   const { can, settings } = usePrefs();
   const adminSection = ADMIN_SECTIONS.find(([perm]) => can(perm))?.[1];
-  return [
-    { id: "home", to: "/", label: "Home", icon: LayoutDashboard, show: can("dashboards_view") },
-    { id: "search", to: "/search", label: "Search", icon: Search, show: can("search_all") },
-    { id: "live", to: "/live", label: "Live", icon: Radio, show: can("live_view") },
-    { id: "dashboards", to: "/dashboards", label: "Dashboards", icon: BarChart3, show: can("dashboards_view") },
-    { id: "explore", to: "/explore", label: "Explore", icon: Compass, show: can("explore") },
-    { id: "subscribers", to: "/subscribers", label: "Subscribers", icon: Users, show: can("subscribers_view") },
-    { id: "sql", to: "/sql", label: "SQL workbench", icon: Database, show: can("sql_workbench") && settings.sql_enabled },
-    { id: "admin", to: `/admin/${adminSection ?? "users"}`, label: "Admin", icon: Settings, show: Boolean(adminSection) },
+  const items = [
+    { id: "home", group: "Monitor", to: "/", label: "Home", icon: LayoutDashboard, show: can("dashboards_view") },
+    { id: "dashboards", group: "Monitor", to: "/dashboards", label: "Dashboards", icon: BarChart3, show: can("dashboards_view") },
+    { id: "explore", group: "Monitor", to: "/explore", label: "Explore", icon: Compass, show: can("explore") },
+    { id: "live", group: "Monitor", to: "/live", label: "Live", icon: Radio, show: can("live_view") },
+    { id: "search", group: "Troubleshoot", to: "/search", label: "Search", icon: Search, show: can("search_all") },
+    { id: "subscribers", group: "Troubleshoot", to: "/subscribers", label: "Subscribers", icon: Users, show: can("subscribers_view") },
+    { id: "sql", group: "Troubleshoot", to: "/sql", label: "SQL workbench", icon: Database, show: can("sql_workbench") && settings.sql_enabled },
+    { id: "admin", group: "System", to: `/admin/${adminSection ?? "users"}`, label: "Admin", icon: Settings, show: Boolean(adminSection) },
   ].filter((n) => n.show);
+  return ["Monitor", "Troubleshoot", "System"].map((g) => ({ group: g, items: items.filter((n) => n.group === g) })).filter((g) => g.items.length > 0);
+}
+
+function initials(name: string) {
+  const parts = name.trim().split(/[\s._-]+/).filter(Boolean);
+  return ((parts[0]?.[0] ?? "?") + (parts[1]?.[0] ?? "")).toUpperCase();
+}
+
+/** Capture health at a glance, for people who can see the agents page. */
+function CaptureCard() {
+  const { data } = useQuery({ queryKey: ["admin", "agents"], queryFn: () => get("/admin/agents"), refetchInterval: 30_000 });
+  if (!data) return null;
+  const active = data.filter((a: any) => a.status !== "silent").length;
+  return (
+    <Link to="/admin/$section" params={{ section: "agents" } as any} className="block mx-3 mb-2 rounded-xl border border-line bg-sunken/60 p-3 hover:border-line-2">
+      <div className="flex items-center gap-2">
+        <span className={`w-2 h-2 rounded-full ${active > 0 ? "bg-good" : "bg-ink-3"}`} aria-hidden />
+        <span className="text-[12.5px] font-medium">Capture</span>
+        <span className="ml-auto text-[11.5px] text-ink-3 tnum">{active}/{data.length} agents</span>
+      </div>
+      <p className="text-[11.5px] text-ink-3 mt-1 leading-snug">
+        {data.length === 0 ? "No HEP received yet. Point your SIP servers at port 9060." : active === data.length ? "All agents are sending." : `${data.length - active} agent${data.length - active === 1 ? " is" : "s are"} silent.`}
+      </p>
+    </Link>
+  );
 }
 
 export function Shell() {
@@ -53,48 +78,56 @@ export function Shell() {
 
   return (
     <div className="flex h-full">
-      <aside className="w-[196px] shrink-0 bg-surface border-r border-line flex flex-col">
-        <div className="h-[50px] flex items-center gap-2 px-3.5 border-b border-line">
-          <svg width="20" height="20" viewBox="0 0 32 32" aria-hidden>
-            <rect width="32" height="32" rx="7" fill="var(--accent)" />
-            <path d="M8 9v14M16 9v14M24 9v14M8 13h16M24 19H8" stroke="white" strokeWidth="2" strokeLinecap="round" />
+      <aside className="w-[232px] shrink-0 bg-surface border-r border-line flex flex-col">
+        <div className="h-[60px] flex items-center gap-2.5 px-4 shrink-0">
+          <svg width="28" height="28" viewBox="0 0 32 32" aria-hidden>
+            <rect width="32" height="32" rx="9" fill="var(--accent)" />
+            <path d="M8 9v14M16 9v14M24 9v14M8 13h16M24 19H8" stroke="white" strokeWidth="2.2" strokeLinecap="round" />
           </svg>
-          <span className="font-semibold tracking-tight truncate">{settings.app_name}</span>
+          <span className="font-semibold text-[15px] tracking-tight truncate">{settings.app_name}</span>
         </div>
-        <nav className="flex-1 p-2 space-y-px overflow-y-auto">
-          {nav.map((n) => (
-            <Link
-              key={n.id}
-              to={n.to}
-              search={{ from: search.from, to: search.to } as any}
-              className={`flex items-center gap-2.5 px-2.5 h-[30px] rounded-md ${active(n.to) ? "bg-accent-wash text-ink font-medium" : "text-ink-2 hover:bg-sunken hover:text-ink"}`}
-            >
-              <n.icon size={15} aria-hidden />
-              <span className="flex-1">{n.label}</span>
-            </Link>
+        <nav className="flex-1 px-3 pb-3 overflow-y-auto">
+          {nav.map((g) => (
+            <div key={g.group} className="mt-3 first:mt-1">
+              <div className="px-2.5 pb-1.5 text-[10.5px] font-medium uppercase tracking-[0.06em] text-ink-3">{g.group}</div>
+              <div className="space-y-0.5">
+                {g.items.map((n) => (
+                  <Link
+                    key={n.id}
+                    to={n.to}
+                    search={{ from: search.from, to: search.to } as any}
+                    className={`flex items-center gap-2.5 px-2.5 h-9 rounded-lg ${active(n.to) ? "bg-sunken text-ink font-medium" : "text-ink-2 hover:bg-sunken hover:text-ink"}`}
+                  >
+                    <n.icon size={16} aria-hidden className={active(n.to) ? "text-ink" : "text-ink-3"} />
+                    <span className="flex-1">{n.label}</span>
+                  </Link>
+                ))}
+              </div>
+            </div>
           ))}
         </nav>
-        <div className="p-2 border-t border-line">
+        {can("system_view") && <CaptureCard />}
+        <div className="px-3 py-3 border-t border-line">
           <div className="flex items-center gap-1">
-            <Link to="/preferences" className="flex-1 min-w-0 flex items-center gap-2 px-1.5 py-1 rounded-md hover:bg-sunken" title="Preferences">
-              <CircleUserRound size={18} className="text-ink-2 shrink-0" aria-hidden />
+            <Link to="/preferences" className="flex-1 min-w-0 flex items-center gap-2.5 px-1.5 py-1 rounded-lg hover:bg-sunken" title="Preferences">
+              <span className="w-8 h-8 shrink-0 rounded-full bg-accent-wash text-accent text-[12px] font-semibold flex items-center justify-center" aria-hidden>{initials(me.display_name || me.username)}</span>
               <span className="min-w-0">
                 <span className="block truncate font-medium text-[12.5px] leading-4">{me.display_name || me.username}</span>
                 <span className="block truncate text-[11px] text-ink-3 leading-4">{me.role}</span>
               </span>
             </Link>
-            <button type="button" onClick={toggleTheme} aria-label="Switch theme" title="Switch theme" className="p-1 rounded hover:bg-sunken text-ink-2">
+            <button type="button" onClick={toggleTheme} aria-label="Switch theme" title="Switch theme" className="p-1.5 rounded-lg hover:bg-sunken text-ink-2">
               {theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
             </button>
-            <button type="button" onClick={() => logout.mutate()} aria-label="Sign out" title="Sign out" className="p-1 rounded hover:bg-sunken text-ink-2"><LogOut size={15} /></button>
+            <button type="button" onClick={() => logout.mutate()} aria-label="Sign out" title="Sign out" className="p-1.5 rounded-lg hover:bg-sunken text-ink-2"><LogOut size={15} /></button>
           </div>
         </div>
       </aside>
       <div className="flex-1 min-w-0 flex flex-col">
         <TopBar />
-        {settings.banner_text && <div className="bg-warn-wash text-warn text-xs px-4 py-1 shrink-0">{settings.banner_text}</div>}
-        {noStorage && <div className="bg-warn-wash text-warn text-xs px-4 py-1 shrink-0">No ClickHouse is selected, so captured traffic is not being stored. {can("storage_manage") ? <Link to="/admin/$section" params={{ section: "storage" } as any} className="underline">Select one on the Storage page</Link> : "Ask an administrator to select one."}.</div>}
-        <main className="flex-1 min-h-0 overflow-auto p-4" id="main-scroll">
+        {settings.banner_text && <div className="bg-warn-wash text-warn text-xs px-5 py-1.5 shrink-0">{settings.banner_text}</div>}
+        {noStorage && <div className="bg-warn-wash text-warn text-xs px-5 py-1.5 shrink-0">No ClickHouse is selected, so captured traffic is not being stored. {can("storage_manage") ? <Link to="/admin/$section" params={{ section: "storage" } as any} className="underline">Select one on the Storage page</Link> : "Ask an administrator to select one."}.</div>}
+        <main className="flex-1 min-h-0 overflow-auto p-5" id="main-scroll">
           <Outlet />
         </main>
       </div>
@@ -142,9 +175,9 @@ function TopBar() {
     : [];
 
   return (
-    <header className="h-[50px] shrink-0 bg-surface border-b border-line flex items-center gap-3 px-4">
+    <header className="h-[60px] shrink-0 bg-surface border-b border-line flex items-center gap-3 px-5">
       <form onSubmit={submit} className="relative flex-1 max-w-[720px]">
-        <Search size={15} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-3" aria-hidden />
+        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-3" aria-hidden />
         <input
           ref={input}
           value={q}
@@ -154,16 +187,16 @@ function TopBar() {
           spellCheck={false}
           aria-label="Universal search"
           placeholder={browse ? 'Paste a number, Call-ID or IP, or filter: capture:201 trunk:"Carrier-X" status:5xx' : "Enter the customer's number"}
-          className="w-full h-8 rounded-md bg-sunken border border-line pl-8 pr-8 font-mono text-[12.5px] placeholder:font-sans placeholder:text-ink-3 focus:bg-raised focus:border-accent focus:outline-none"
+          className="w-full h-9 rounded-lg bg-sunken border border-line pl-9 pr-9 font-mono text-[12.5px] placeholder:font-sans placeholder:text-ink-3 focus:bg-raised focus:border-accent focus:outline-none"
         />
-        <kbd className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-ink-3 border border-line-2 rounded px-1">/</kbd>
+        <kbd className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[11px] text-ink-3 bg-raised border border-line-2 rounded-md px-1.5 leading-4">/</kbd>
         {suggestions.length > 0 && (
-          <ul className="absolute z-30 top-full mt-1 left-0 w-[380px] bg-raised border border-line-2 rounded-md shadow-lg py-1">
+          <ul className="absolute z-30 top-full mt-1.5 left-0 w-[380px] bg-raised border border-line rounded-xl shadow-lg p-1">
             {suggestions.map((f: any) => (
               <li key={f.field}>
                 <button
                   type="button"
-                  className="w-full text-left px-2.5 py-1 hover:bg-sunken flex gap-3"
+                  className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-sunken flex gap-3"
                   onMouseDown={(e) => {
                     e.preventDefault();
                     setQ(q.slice(0, q.length - lastToken.length) + f.field + ":");
@@ -266,13 +299,13 @@ export function TimePicker() {
           <span className="text-ink-3 font-normal">{tz}</span>
         </Button>
         {open && (
-          <div className="absolute z-30 right-0 mt-1 w-[320px] bg-raised border border-line-2 rounded-lg shadow-lg p-2.5">
+          <div className="absolute z-30 right-0 mt-1.5 w-[320px] bg-raised border border-line rounded-xl shadow-lg p-2.5">
             <div className="grid grid-cols-2 gap-px">
               {QUICK.map((q) => (
                 <button
                   key={q.from}
                   type="button"
-                  className={`text-left px-2 py-1 rounded hover:bg-sunken ${q.from === from && to === "now" ? "font-semibold" : "text-ink-2"}`}
+                  className={`text-left px-2 py-1.5 rounded-lg hover:bg-sunken ${q.from === from && to === "now" ? "font-semibold" : "text-ink-2"}`}
                   onClick={() => {
                     setRange(q.from, "now");
                     setOpen(false);
@@ -281,8 +314,8 @@ export function TimePicker() {
                   {q.label}
                 </button>
               ))}
-              <button type="button" className="text-left px-2 py-1 rounded hover:bg-sunken text-ink-2" onClick={() => dayRange(0)}>Today</button>
-              <button type="button" className="text-left px-2 py-1 rounded hover:bg-sunken text-ink-2" onClick={() => dayRange(1)}>Yesterday</button>
+              <button type="button" className="text-left px-2 py-1.5 rounded-lg hover:bg-sunken text-ink-2" onClick={() => dayRange(0)}>Today</button>
+              <button type="button" className="text-left px-2 py-1.5 rounded-lg hover:bg-sunken text-ink-2" onClick={() => dayRange(1)}>Yesterday</button>
             </div>
             <div className="border-t border-line mt-2 pt-2 space-y-1.5">
               <label className="flex items-center justify-between gap-2 text-xs text-ink-2">

@@ -30,7 +30,7 @@
         "x": 0,
         "y": 0,
         "w": 6,
-        "h": 3
+        "h": 4
       },
       "query": {
         "mode": "metric",
@@ -46,7 +46,7 @@
         "x": 6,
         "y": 0,
         "w": 6,
-        "h": 3
+        "h": 4
       },
       "query": {
         "mode": "metric",
@@ -62,7 +62,7 @@
         "x": 12,
         "y": 0,
         "w": 6,
-        "h": 3
+        "h": 4
       },
       "query": {
         "mode": "metric",
@@ -76,7 +76,7 @@
       "title": "MOS p5 by media node",
       "gridPos": {
         "x": 0,
-        "y": 3,
+        "y": 4,
         "w": 12,
         "h": 9
       },
@@ -98,7 +98,7 @@
       "title": "Loss p95 by media node",
       "gridPos": {
         "x": 12,
-        "y": 3,
+        "y": 4,
         "w": 12,
         "h": 9
       },
@@ -118,7 +118,7 @@
       "title": "Worst MOS by handset model",
       "gridPos": {
         "x": 0,
-        "y": 12,
+        "y": 13,
         "w": 8,
         "h": 9
       },
@@ -138,7 +138,7 @@
       "title": "MOS by codec",
       "gridPos": {
         "x": 16,
-        "y": 12,
+        "y": 13,
         "w": 8,
         "h": 9
       },
@@ -158,7 +158,7 @@
       "title": "Worst calls",
       "gridPos": {
         "x": 0,
-        "y": 21,
+        "y": 22,
         "w": 24,
         "h": 12
       },

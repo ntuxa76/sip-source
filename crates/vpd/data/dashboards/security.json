@@ -30,7 +30,7 @@
         "x": 0,
         "y": 0,
         "w": 8,
-        "h": 3
+        "h": 4
       },
       "query": {
         "mode": "metric",
@@ -46,7 +46,7 @@
         "x": 8,
         "y": 0,
         "w": 8,
-        "h": 3
+        "h": 4
       },
       "query": {
         "mode": "metric",
@@ -62,7 +62,7 @@
         "x": 16,
         "y": 0,
         "w": 8,
-        "h": 3
+        "h": 4
       },
       "query": {
         "mode": "metric",
@@ -76,7 +76,7 @@
       "title": "Scanner requests by country",
       "gridPos": {
         "x": 0,
-        "y": 3,
+        "y": 4,
         "w": 12,
         "h": 9
       },
@@ -95,7 +95,7 @@
       "title": "4xx/5xx/6xx by status code",
       "gridPos": {
         "x": 12,
-        "y": 3,
+        "y": 4,
         "w": 12,
         "h": 9
       },
@@ -114,7 +114,7 @@
       "title": "Auth failures by source IP",
       "gridPos": {
         "x": 0,
-        "y": 12,
+        "y": 13,
         "w": 12,
         "h": 9
       },
@@ -133,7 +133,7 @@
       "title": "High-risk destinations",
       "gridPos": {
         "x": 12,
-        "y": 12,
+        "y": 13,
         "w": 12,
         "h": 9
       },

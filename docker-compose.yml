@@ -23,7 +23,7 @@ services:
       retries: 30
 
   voip-panel:
-    image: ntuxa76/sip-source:0.1
+    image: ntuxa76/sip-source:0.2
     restart: unless-stopped
     depends_on:
       mariadb:

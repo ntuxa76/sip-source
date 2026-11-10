@@ -9,11 +9,13 @@ import { compact, fmtHM, fmtHMS, fmtMonthDay, metricText, tzOffsetMs } from "../
 
 echarts.use([LineChart, BarChart, HeatmapChart, GridComponent, TooltipComponent, AxisPointerComponent, MarkAreaComponent, VisualMapComponent, CanvasRenderer]);
 
-// The validated categorical palette, one step per theme. Slots are assigned by value, never rank.
+// The validated categorical palette, one step per theme (CVD-checked in this order, light and
+// dark). Slots are assigned by value, never rank.
 const PALETTE = {
-  light: ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"],
-  dark: ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#008300", "#9085e9", "#e66767"],
+  light: ["#6250d6", "#eb6834", "#2a78d6", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#e34948"],
+  dark: ["#9085e9", "#d95926", "#3987e5", "#199e70", "#c98500", "#d55181", "#008300", "#e66767"],
 };
+const SLOT = { violet: 0, orange: 1, blue: 2, aqua: 3, yellow: 4, magenta: 5, green: 6, red: 7 };
 
 const KNOWN_SLOTS: Record<string, number> = {};
 for (const group of [
@@ -45,7 +47,7 @@ export function seriesColor(name: string, theme: "light" | "dark"): string {
   // hue but step through shades, so 401 and 403 can still be told apart.
   const code = /^([1-6])(xx|\d\d)$/.exec(name);
   if (code) {
-    const base = { "1": "#898781", "2": p[5], "3": p[0], "4": p[3], "5": p[7], "6": p[6] }[code[1]]!;
+    const base = { "1": "#898781", "2": p[SLOT.green], "3": p[SLOT.blue], "4": p[SLOT.yellow], "5": p[SLOT.red], "6": p[SLOT.violet] }[code[1]]!;
     if (code[2] === "xx") return base;
     return CODE_SHADES[code[1]]?.[Number(name) % 4] ?? base;
   }
@@ -56,8 +58,32 @@ export function seriesColor(name: string, theme: "light" | "dark"): string {
 
 function chrome(theme: "light" | "dark") {
   return theme === "dark"
-    ? { surface: "#1a1a19", ink: "#f0efec", ink2: "#c3c2b7", muted: "#9a9992", grid: "#2c2c2a", axis: "#383835", raised: "#232322" }
-    : { surface: "#fcfcfb", ink: "#0b0b0b", ink2: "#52514e", muted: "#6b6a65", grid: "#e1e0d9", axis: "#c3c2b7", raised: "#ffffff" };
+    ? { surface: "#16161a", ink: "#f2f2f5", ink2: "#b9b9c4", muted: "#8f8f9c", grid: "#25252c", axis: "#34343d", raised: "#1d1d22", shadow: "rgba(0,0,0,0.45)" }
+    : { surface: "#ffffff", ink: "#111114", ink2: "#4f4f5a", muted: "#6e6e7a", grid: "#ebebef", axis: "#dadae1", raised: "#ffffff", shadow: "rgba(17,17,20,0.08)" };
+}
+
+function withAlpha(hex: string, a: number) {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+}
+
+/** A soft fade from the series colour down to nothing, under a line. */
+function fade(color: string, top: number) {
+  return new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+    { offset: 0, color: withAlpha(color, top) },
+    { offset: 1, color: withAlpha(color, 0) },
+  ]);
+}
+
+function tooltipChrome(c: ReturnType<typeof chrome>) {
+  return {
+    backgroundColor: c.raised,
+    borderColor: c.grid,
+    borderWidth: 1,
+    padding: [9, 11],
+    extraCssText: `border-radius:10px;box-shadow:0 8px 24px ${c.shadow};`,
+    textStyle: { color: c.ink, fontSize: 12, fontFamily: FONT },
+  };
 }
 
 const FONT = "'Inter Variable', system-ui, sans-serif";
@@ -233,7 +259,7 @@ function Legend({ data, hidden, onToggle }: { data: TimeSeriesResult; hidden: Se
             onClick={(e) => onToggle(s.name, e.altKey)}
             className={`flex items-center gap-1.5 text-[11.5px] ${off ? "opacity-40" : ""}`}
           >
-            <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: seriesColor(s.name, theme) }} />
+            <span className="inline-block w-2 h-2 rounded-full" style={{ background: seriesColor(s.name, theme) }} />
             <span className="text-ink-2">{s.name}</span>
             <span className="text-ink-3 tnum">{metricText(last, unit)}</span>
           </button>
@@ -262,7 +288,7 @@ function buildTimeOption(data: TimeSeriesResult, viz: Viz, theme: "light" | "dar
         type: "bar",
         stack,
         barMaxWidth: 24,
-        itemStyle: { color, borderColor: c.surface, borderWidth: data.buckets.length > 150 ? 0 : 1 },
+        itemStyle: { color, borderColor: c.surface, borderWidth: data.buckets.length > 150 ? 0 : 1, borderRadius: stack ? 0 : [3, 3, 0, 0] },
         emphasis: { disabled: true },
         data: s.values.map((v, i) =>
           partial !== null && i >= partial
@@ -279,13 +305,15 @@ function buildTimeOption(data: TimeSeriesResult, viz: Viz, theme: "light" | "dar
       return lowSample(i) ? { value: v, symbol: "circle", symbolSize: 4, itemStyle: { color: c.muted } } : v;
     });
     const tail = s.values.map((v, i) => (partial !== null && i >= partial - 1 ? v : null));
-    const base = { name: s.name, type: "line", showSymbol: false, symbolSize: 8, connectNulls: false, stack, animation: false, emphasis: { disabled: true } };
+    const base = { name: s.name, type: "line", smooth: 0.3, smoothMonotone: "x", showSymbol: false, symbolSize: 8, connectNulls: false, stack, animation: false, emphasis: { disabled: true } };
+    // A stacked area keeps flat fills so the bands stay readable; a lone line gets a soft fade.
+    const area = viz === "area" ? (stack ? { color, opacity: 0.32 } : { color: fade(color, 0.22) }) : data.series.length === 1 ? { color: fade(color, 0.12) } : undefined;
     series.push({
       ...base,
       data: settled,
       lineStyle: { width: 2, color, cap: "round", join: "round" },
-      itemStyle: { color },
-      areaStyle: viz === "area" ? { color, opacity: stack ? 0.32 : 0.1 } : undefined,
+      itemStyle: { color, borderColor: c.surface, borderWidth: 2 },
+      areaStyle: area,
     });
     if (partial !== null) {
       series.push({ ...base, stack: stack ? "tail" : undefined, data: tail, lineStyle: { width: 2, color, type: [4, 3] }, itemStyle: { color } });
@@ -295,7 +323,7 @@ function buildTimeOption(data: TimeSeriesResult, viz: Viz, theme: "light" | "dar
   return {
     animation: false,
     textStyle: { fontFamily: FONT },
-    grid: { left: 46, right: 10, top: 8, bottom: 20 },
+    grid: { left: 46, right: 12, top: 10, bottom: 22 },
     xAxis: {
       type: "category",
       data: categories,
@@ -309,7 +337,7 @@ function buildTimeOption(data: TimeSeriesResult, viz: Viz, theme: "light" | "dar
         formatter: (v: string) => label(Number(v)),
         hideOverlap: true,
       },
-      axisPointer: { type: "line", lineStyle: { color: c.axis, width: 1 } },
+      axisPointer: { type: "line", lineStyle: { color: c.muted, width: 1, type: [4, 4] } },
     },
     yAxis: {
       type: "value",
@@ -319,17 +347,14 @@ function buildTimeOption(data: TimeSeriesResult, viz: Viz, theme: "light" | "dar
       splitNumber: 3,
       axisLine: { show: false },
       axisTick: { show: false },
-      splitLine: { lineStyle: { color: c.grid, width: 1 } },
+      splitLine: { lineStyle: { color: c.grid, width: 1, type: [3, 3] } },
       axisLabel: { color: c.muted, fontSize: 11, formatter: (v: number) => axisValue(v, unit) },
     },
     tooltip: {
       trigger: "axis",
       confine: true,
       transitionDuration: 0,
-      backgroundColor: c.raised,
-      borderColor: c.axis,
-      padding: [7, 9],
-      textStyle: { color: c.ink, fontSize: 12, fontFamily: FONT },
+      ...tooltipChrome(c),
       formatter: (params: any[]) => tooltipHtml(params, data, theme, tz),
     },
     series,
@@ -364,28 +389,31 @@ function tooltipHtml(params: any[], data: TimeSeriesResult, theme: "light" | "da
         .map((r) => {
           const low = data.metric.min_samples > 0 && r.n < data.metric.min_samples;
           const sample = ["ratio", "latency", "quality"].includes(data.metric.kind) && data.metric.family !== "synth" ? `<span style="color:${c.muted}"> n=${r.n}${low ? " · low sample" : ""}</span>` : "";
-          return `<div style="display:flex;justify-content:space-between;gap:18px"><span><i style="display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:6px;background:${seriesColor(r.name, theme)}"></i>${single ? escapeHtml(data.metric.name) : escapeHtml(r.name)}</span><span style="font-variant-numeric:tabular-nums"><b style="font-weight:600">${metricText(r.v, data.metric.unit)}</b>${sample}</span></div>`;
+          return `<div style="display:flex;justify-content:space-between;gap:18px"><span><i style="display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:7px;background:${seriesColor(r.name, theme)}"></i>${single ? escapeHtml(data.metric.name) : escapeHtml(r.name)}</span><span style="font-variant-numeric:tabular-nums"><b style="font-weight:600">${metricText(r.v, data.metric.unit)}</b>${sample}</span></div>`;
         })
         .join("")
     : `<div style="color:${c.muted}">No samples in this bucket</div>`;
-  return `<div style="color:${c.ink2};font-size:11.5px;margin-bottom:4px">${fmtMonthDay(start, tz)} ${fmt(start, tz)} – ${fmt(end, tz)}${partial ? " · still settling" : ""}</div>${body}`;
+  return `<div style="color:${c.ink2};font-size:11.5px;font-weight:500;margin-bottom:6px">${fmtMonthDay(start, tz)} ${fmt(start, tz)} – ${fmt(end, tz)}${partial ? " · still settling" : ""}</div>${body}`;
 }
 
-export function Sparkline({ values, width = 92, height = 26 }: { values: (number | null)[]; width?: number; height?: number }) {
-  const v = values.map((x, i) => [i, x] as const).filter((p): p is readonly [number, number] => p[1] !== null);
-  if (v.length < 2) return <svg width={width} height={height} />;
-  const ys = v.map((p) => p[1]);
-  const [lo, hi] = [Math.min(...ys), Math.max(...ys)];
-  const range = hi - lo || 1;
-  const x = (i: number) => (i / (values.length - 1)) * (width - 5) + 1;
-  const y = (val: number) => height - 3 - ((val - lo) / range) * (height - 6);
-  const d = v.map(([i, val]) => `${x(i).toFixed(1)},${y(val).toFixed(1)}`).join(" ");
-  const last = v[v.length - 1];
+/** The small bar strip under a stat: hatched history, with the latest settled bucket in colour. */
+export function MiniBars({ values, unit, count = 12, height = 30 }: { values: (number | null)[]; unit: string; count?: number; height?: number }) {
+  const size = Math.max(1, Math.ceil(values.length / count));
+  const bars: (number | null)[] = [];
+  for (let i = 0; i < values.length; i += size) {
+    const chunk = values.slice(i, i + size).filter((v): v is number => v !== null && v !== undefined);
+    bars.push(chunk.length ? chunk.reduce((x, y) => x + y, 0) / chunk.length : null);
+  }
+  const max = Math.max(0, ...bars.map((v) => v ?? 0));
+  if (bars.length === 0) return <div style={{ height }} />;
   return (
-    <svg width={width} height={height} aria-hidden>
-      <polyline points={d} fill="none" stroke="var(--line-2)" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
-      <circle cx={x(last[0])} cy={y(last[1])} r="3" fill="var(--accent)" stroke="var(--surface)" strokeWidth="1.5" />
-    </svg>
+    <div className="flex items-end gap-1" style={{ height }} aria-hidden>
+      {bars.map((v, i) => {
+        const pct = v === null || max === 0 ? 0 : (v / max) * 100;
+        const last = i === bars.length - 1;
+        return <div key={i} title={metricText(v, unit)} className={`flex-1 rounded-[4px] ${last ? "bar-hatch-accent" : "bar-hatch"}`} style={{ height: `${Math.max(pct, 8)}%` }} />;
+      })}
+    </div>
   );
 }
 
@@ -399,8 +427,8 @@ export function BarList({ rows, unit, color, onClick }: { rows: { key: string; v
             <span className="truncate text-ink-2 group-hover:text-ink">{r.key}</span>
             <span className="tnum text-ink font-medium">{metricText(r.value, unit)}</span>
           </div>
-          <div className="h-1 mt-0.5 rounded-full">
-            <div className="h-1 rounded-full" style={{ width: `${Math.max((r.value / max) * 100, 1.5)}%`, background: color ?? "var(--accent)" }} />
+          <div className="h-1.5 mt-1 rounded-full bg-sunken">
+            <div className="h-1.5 rounded-full" style={{ width: `${Math.max((r.value / max) * 100, 1.5)}%`, background: color ?? "var(--accent)" }} />
           </div>
         </button>
       ))}
@@ -425,12 +453,10 @@ export function HeatChart({ data, height, onClick }: { data: any; height: number
       grid: { left: 46, right: 10, top: 6, bottom: 20 },
       xAxis: { type: "category", data: data.buckets.map(String), axisTick: { show: false }, axisLine: { lineStyle: { color: c.axis } }, splitArea: { show: false }, axisLabel: { color: c.muted, fontSize: 11, interval: (i: number) => isTick(data.buckets[i]), formatter: (v: string) => label(Number(v)), hideOverlap: true } },
       yAxis: { type: "category", data: data.keys, axisTick: { show: false }, axisLine: { show: false }, axisLabel: { color: c.ink2, fontSize: 11, fontFamily: "'JetBrains Mono Variable', monospace" } },
-      visualMap: { show: false, min: 0, max, inRange: { color: theme === "dark" ? ["#1a2c44", "#256abf", "#86b6ef", "#cde2fb"] : ["#e6f0fc", "#86b6ef", "#256abf", "#0d366b"] } },
+      visualMap: { show: false, min: 0, max, inRange: { color: theme === "dark" ? ["#241f3f", "#4a3fa6", "#9085e9", "#d9d4fa"] : ["#f0edfd", "#b5acf0", "#6250d6", "#2f2580"] } },
       tooltip: {
         confine: true,
-        backgroundColor: c.raised,
-        borderColor: c.axis,
-        textStyle: { color: c.ink, fontSize: 12, fontFamily: FONT },
+        ...tooltipChrome(c),
         formatter: (p: any) => `${fmtMonthDay(data.buckets[p.value[0]], tz)} ${fmtHM(data.buckets[p.value[0]], tz)}<br/>Status <b>${data.keys[p.value[1]]}</b>: <b>${p.value[2]}</b> calls`,
       },
       series: [{ type: "heatmap", data: data.cells, itemStyle: { borderColor: c.surface, borderWidth: 1 }, emphasis: { disabled: true } }],
@@ -457,7 +483,7 @@ export function Histogram({ bins, unit, height }: { bins: { from: number; to: nu
       grid: { left: 40, right: 8, top: 8, bottom: 20 },
       xAxis: { type: "category", data: bins.map((b) => b.from.toFixed(unit === "mos" ? 2 : 0)), axisTick: { show: false }, axisLine: { lineStyle: { color: c.axis } }, axisLabel: { color: c.muted, fontSize: 11, hideOverlap: true, interval: 3 } },
       yAxis: { type: "value", splitNumber: 3, axisLine: { show: false }, axisTick: { show: false }, splitLine: { lineStyle: { color: c.grid } }, axisLabel: { color: c.muted, fontSize: 11, formatter: compact } },
-      tooltip: { trigger: "axis", backgroundColor: c.raised, borderColor: c.axis, textStyle: { color: c.ink, fontSize: 12, fontFamily: FONT }, formatter: (p: any[]) => { const b = bins[p[0].dataIndex]; return `MOS ${b.from.toFixed(2)}–${b.to.toFixed(2)}: <b>${b.count.toLocaleString()}</b> calls`; } },
+      tooltip: { trigger: "axis", ...tooltipChrome(c), formatter: (p: any[]) => { const b = bins[p[0].dataIndex]; return `MOS ${b.from.toFixed(2)}–${b.to.toFixed(2)}: <b>${b.count.toLocaleString()}</b> calls`; } },
       series: [{ type: "bar", barMaxWidth: 24, itemStyle: { borderRadius: [4, 4, 0, 0] }, data: bins.map((b) => ({ value: b.count, itemStyle: { color: mosBarColor(b.from, unit, theme) } })) }],
     }),
     [bins, unit, theme, c.axis, c.muted, c.grid, c.raised, c.ink],
@@ -495,9 +521,7 @@ export function HistogramStrip({ histogram, height = 70, onZoom }: { histogram: 
       tooltip: {
         trigger: "axis",
         confine: true,
-        backgroundColor: c.raised,
-        borderColor: c.axis,
-        textStyle: { color: c.ink, fontSize: 12, fontFamily: FONT },
+        ...tooltipChrome(c),
         formatter: (p: any[]) => `${fmtHMS(histogram.buckets[p[0].dataIndex], tz)}<br/>${p.filter((x) => x.value).map((x) => `${x.seriesName}: <b>${x.value}</b>`).join("<br/>") || "No calls"}`,
       },
       series: histogram.series.map((s: any) => ({ name: s.name, type: "bar", stack: "t", barMaxWidth: 24, itemStyle: { color: colors[s.name] }, data: s.values, emphasis: { disabled: true } })),

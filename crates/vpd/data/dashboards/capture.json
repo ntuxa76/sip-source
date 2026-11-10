@@ -30,7 +30,7 @@
         "x": 0,
         "y": 0,
         "w": 8,
-        "h": 3
+        "h": 4
       },
       "query": {
         "mode": "metric",
@@ -46,7 +46,7 @@
         "x": 16,
         "y": 0,
         "w": 8,
-        "h": 3
+        "h": 4
       },
       "query": {
         "mode": "metric",
@@ -60,7 +60,7 @@
       "title": "HEP packets/s by agent",
       "gridPos": {
         "x": 0,
-        "y": 3,
+        "y": 4,
         "w": 12,
         "h": 9
       },
@@ -79,7 +79,7 @@
       "title": "Drops by reason",
       "gridPos": {
         "x": 12,
-        "y": 3,
+        "y": 4,
         "w": 12,
         "h": 9
       },
@@ -98,7 +98,7 @@
       "title": "Agent clock offset",
       "gridPos": {
         "x": 0,
-        "y": 12,
+        "y": 13,
         "w": 12,
         "h": 9
       },
@@ -117,7 +117,7 @@
       "title": "ClickHouse insert p95",
       "gridPos": {
         "x": 12,
-        "y": 12,
+        "y": 13,
         "w": 12,
         "h": 9
       },
