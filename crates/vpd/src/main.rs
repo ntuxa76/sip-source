@@ -1,4 +1,4 @@
-//! vpd: the sip-source daemon. Configured entirely through `VP_*` environment variables.
+//! vpd: the sip-source daemon. Configured entirely through `SS_*` environment variables.
 //! Run `vpd env` to list them, and `vpd healthcheck` for the container health probe.
 
 #![recursion_limit = "512"]
@@ -21,6 +21,7 @@ mod registrations;
 mod search;
 mod sip;
 mod sql;
+mod sso;
 mod storage;
 
 use std::io::{Read, Write};
@@ -35,9 +36,9 @@ fn fail(message: impl std::fmt::Display) -> ! {
 }
 
 fn healthcheck() -> ! {
-    let listen = std::env::var("VP_LISTEN").unwrap_or_else(|_| "0.0.0.0:8080".into());
+    let listen = config::var("SS_LISTEN").unwrap_or_else(|_| "0.0.0.0:8080".into());
     let port = listen.rsplit(':').next().unwrap_or("8080");
-    let addr: SocketAddr = format!("127.0.0.1:{port}").parse().unwrap_or_else(|_| fail("bad VP_LISTEN"));
+    let addr: SocketAddr = format!("127.0.0.1:{port}").parse().unwrap_or_else(|_| fail("bad SS_LISTEN"));
     let check = || -> std::io::Result<bool> {
         let mut s = TcpStream::connect_timeout(&addr, Duration::from_secs(3))?;
         s.set_read_timeout(Some(Duration::from_secs(3)))?;
@@ -83,9 +84,9 @@ fn print_env(format: Option<&str>) -> ! {
             println!("## How to set them\n");
             println!("- **Docker Compose:** add them under `environment:` of the `sip-source` service in `docker-compose.yml`, or put them in `.env` and reference them there.");
             println!("- **docker run:** pass each one with `-e NAME=value`.");
-            println!("- **Secrets:** the passwords below also accept a `_FILE` variant, for example `VP_DB_PASSWORD_FILE=/run/secrets/db`, which reads the value from that file.\n");
-            println!("Only `VP_DB_HOST`, `VP_DB_USER` and `VP_DB_PASSWORD` are required. Everything else has a working default.\n");
-            println!("Storage isn't set here. Captured data goes to the built-in Local file storage under `VP_DATA_DIR` until you add a ClickHouse server under **Admin → Storage**.\n");
+            println!("- **Secrets:** the passwords below also accept a `_FILE` variant, for example `SS_DB_PASSWORD_FILE=/run/secrets/db`, which reads the value from that file.\n");
+            println!("Only `SS_DB_HOST`, `SS_DB_USER` and `SS_DB_PASSWORD` are required. Everything else has a working default.\n");
+            println!("Storage isn't set here. Captured data goes to the built-in Local file storage under `SS_DATA_DIR` until you add a ClickHouse server under **Admin → Storage**.\n");
             println!("## Startup settings\n\nRead once when the container starts. Changing one means restarting the container.");
             for group in boot_groups {
                 println!("\n### {group}\n\n| Variable | Default | Required | Description |\n|---|---|---|---|");
@@ -125,7 +126,7 @@ async fn main() {
     let boot = config::Boot::from_env().unwrap_or_else(|e| fail(e));
     let settings = config::Settings::from_env().unwrap_or_else(|e| fail(e));
 
-    let filter = tracing_subscriber::EnvFilter::try_new(format!("{},sqlx=warn", boot.log_level)).unwrap_or_else(|_| fail("VP_LOG_LEVEL is not valid"));
+    let filter = tracing_subscriber::EnvFilter::try_new(format!("{},sqlx=warn", boot.log_level)).unwrap_or_else(|_| fail("SS_LOG_LEVEL is not valid"));
     if boot.log_format == "json" {
         tracing_subscriber::fmt().with_env_filter(filter).json().init();
     } else {
