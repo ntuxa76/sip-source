@@ -97,15 +97,21 @@ fn not_found(what: &str) -> Response {
 /// every write stops cross-site request forgery.
 async fn csrf(request: Request, next: Next) -> Response {
     let safe = matches!(*request.method(), Method::GET | Method::HEAD | Method::OPTIONS);
-    if !safe && !request.headers().contains_key("x-vp-request") {
-        return problem(StatusCode::FORBIDDEN, "Blocked", "This request is missing the X-VP-Request header.");
+    if !safe && !request.headers().contains_key("x-ss-request") {
+        return problem(StatusCode::FORBIDDEN, "Blocked", "This request is missing the X-SS-Request header.");
     }
     next.run(request).await
 }
 
 async fn security_headers(request: Request, next: Next) -> Response {
+    let https = request.headers().get("x-forwarded-proto").and_then(|v| v.to_str().ok()) == Some("https");
     let mut res = next.run(request).await;
     let h = res.headers_mut();
+    if https {
+        h.insert("strict-transport-security", HeaderValue::from_static("max-age=31536000"));
+    }
+    h.insert("cross-origin-opener-policy", HeaderValue::from_static("same-origin"));
+    h.insert("permissions-policy", HeaderValue::from_static("camera=(), microphone=(), geolocation=(), payment=()"));
     h.insert("x-content-type-options", HeaderValue::from_static("nosniff"));
     h.insert("x-frame-options", HeaderValue::from_static("DENY"));
     h.insert("referrer-policy", HeaderValue::from_static("same-origin"));
@@ -119,6 +125,9 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/auth/setup", post(auth::setup))
         .route("/auth/login", post(auth::login))
         .route("/auth/logout", post(auth::logout))
+        .route("/auth/sso/login", get(crate::sso::start))
+        .route("/auth/sso/callback", get(crate::sso::callback))
+        .route("/admin/sso/check", post(crate::sso::check))
         .route("/auth/me", get(auth::me))
         .route("/auth/me/prefs", put(auth::put_prefs))
         .route("/auth/me/password", post(auth::change_password))
@@ -183,7 +192,10 @@ pub fn router(app: Arc<App>) -> Router {
 async fn ready(State(a): S) -> Response {
     match sqlx::query("SELECT 1").execute(&a.db).await {
         Ok(_) => "ready".into_response(),
-        Err(e) => problem(StatusCode::SERVICE_UNAVAILABLE, "Database unavailable", &e.to_string()),
+        Err(e) => {
+            tracing::warn!("readiness check failed: {e}");
+            problem(StatusCode::SERVICE_UNAVAILABLE, "Database unavailable", "MariaDB can't be reached.")
+        }
     }
 }
 
@@ -532,7 +544,9 @@ async fn export_csv(State(a): S, user: User, Query(p): Query<SearchParams>) -> R
             Value::Array(list) => list.iter().map(|x| x.as_str().map(str::to_string).unwrap_or_else(|| x.to_string())).collect::<Vec<_>>().join("|"),
             other => other.to_string(),
         };
-        if text.contains([',', '"', '\n']) { format!("\"{}\"", text.replace('"', "\"\"")) } else { text }
+        // Captured text can start with = + - or @, which a spreadsheet would run as a formula.
+        let text = if matches!(v, Value::String(_) | Value::Array(_)) && text.starts_with(['=', '+', '-', '@', '\t', '\r']) { format!("'{text}") } else { text };
+        if text.contains([',', '"', '\n', '\r']) { format!("\"{}\"", text.replace('"', "\"\"")) } else { text }
     };
     let mut body = columns.join(",");
     body.push('\n');
@@ -745,8 +759,11 @@ async fn saved_list(State(a): S, user: User) -> Response {
 }
 
 async fn saved_create(State(a): S, user: User, Json(b): Json<SavedBody>) -> Response {
-    if b.name.trim().is_empty() {
-        return problem(StatusCode::BAD_REQUEST, "Name required", "Give the search a name.");
+    if let Err(r) = user.need("search_all") {
+        return r;
+    }
+    if b.name.trim().is_empty() || b.name.trim().chars().count() > 128 || b.q.len() > 4096 {
+        return problem(StatusCode::BAD_REQUEST, "Invalid search", "Give the search a name of up to 128 characters.");
     }
     match sqlx::query("INSERT INTO saved_searches (owner_id, name, q, shared, created_at) VALUES (?, ?, ?, ?, ?)").bind(user.id).bind(b.name.trim()).bind(&b.q).bind(b.shared as i8).bind(utc_now()).execute(&a.db).await {
         Ok(r) => Json(json!({"id": r.last_insert_id()})).into_response(),

@@ -27,8 +27,8 @@ fn cipher(secret: &str) -> ChaCha20Poly1305 {
     ChaCha20Poly1305::new_from_slice(&Sha256::digest(secret.as_bytes())).expect("key is 32 bytes")
 }
 
-/// Encrypts with VP_SECRET_KEY when it is set. Without it the value is stored as given.
-fn seal(a: &App, plain: &str) -> String {
+/// Encrypts with SS_SECRET_KEY when it is set. Without it the value is stored as given.
+pub fn seal(a: &App, plain: &str) -> String {
     match &a.boot.secret_key {
         None => format!("plain:{plain}"),
         Some(key) => {
@@ -40,16 +40,16 @@ fn seal(a: &App, plain: &str) -> String {
     }
 }
 
-fn open(a: &App, stored: &str) -> Result<String, String> {
+pub fn open(a: &App, stored: &str) -> Result<String, String> {
     if let Some(p) = stored.strip_prefix("plain:") {
         return Ok(p.to_string());
     }
     let Some(rest) = stored.strip_prefix("enc:") else { return Ok(String::new()) };
-    let key = a.boot.secret_key.as_ref().ok_or("This password was encrypted, but VP_SECRET_KEY is not set.")?;
+    let key = a.boot.secret_key.as_ref().ok_or("This password was encrypted, but SS_SECRET_KEY is not set.")?;
     let (nonce, ct) = rest.split_once(':').ok_or("Stored password is damaged.")?;
     let nonce = B64.decode(nonce).map_err(|e| e.to_string())?;
     let ct = B64.decode(ct).map_err(|e| e.to_string())?;
-    let plain = cipher(key).decrypt(Nonce::from_slice(&nonce), ct.as_slice()).map_err(|_| "Could not decrypt the stored password. Has VP_SECRET_KEY changed?".to_string())?;
+    let plain = cipher(key).decrypt(Nonce::from_slice(&nonce), ct.as_slice()).map_err(|_| "Could not decrypt the stored password. Has SS_SECRET_KEY changed?".to_string())?;
     String::from_utf8(plain).map_err(|e| e.to_string())
 }
 
