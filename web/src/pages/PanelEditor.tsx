@@ -7,18 +7,18 @@ import { ArrowLeft, Play } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { PanelView, buildQuery } from "../components/Panel";
 import type { PanelContext } from "../components/Panel";
-import { Button, Select, Tabs, Toggle } from "../components/ui";
+import { Button, Select, Tabs, Toggle, fieldClass, inputClass } from "../components/ui";
 import { get, post } from "../lib/api";
 import { usePrefs, useRange } from "../lib/context";
 import { PANEL_TYPES, supportsSql, usesMetric } from "../lib/dashboard";
 import type { PanelDef } from "../lib/dashboard";
 
-const field = "w-full h-8 rounded-md bg-sunken border border-line px-2 focus:border-accent";
+const field = inputClass;
 
 function Label({ text, children }: { text: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <span className="text-xs text-ink-2">{text}</span>
+      <span className="block mb-1 text-xs font-medium text-ink-2">{text}</span>
       {children}
     </label>
   );
@@ -102,9 +102,9 @@ export default function PanelEditor({ panel, ctx, onClose, onApply }: { panel: P
 
   return (
     <div className="fixed inset-0 z-30 bg-page flex flex-col">
-      <header className="h-[50px] shrink-0 bg-surface border-b border-line flex items-center gap-3 px-4">
+      <header className="h-12 shrink-0 bg-surface border-b border-line flex items-center gap-2 px-3 sm:px-4">
         <Button variant="ghost" onClick={onClose}><ArrowLeft size={14} />Back</Button>
-        <span className="font-semibold">Edit panel</span>
+        <h1 className="text-sm font-semibold">Edit panel</h1>
         <div className="flex-1" />
         <Button onClick={onClose}>Discard</Button>
         <Button variant="primary" onClick={() => onApply(p)}>Apply</Button>
@@ -114,24 +114,24 @@ export default function PanelEditor({ panel, ctx, onClose, onApply }: { panel: P
           <PanelView key={`${preview.type}-${preview.query.mode}`} panel={preview} ctx={previewCtx} height={330} />
           {usesMetric(p.type) && (
             <div className="bg-surface border border-line rounded-lg">
-              <div className="px-2"><Tabs tabs={tabs} active={mode} onChange={toggleMode} /></div>
+              <div><Tabs tabs={tabs} active={mode} onChange={toggleMode} /></div>
               <div className="p-3">
                 {mode === "metric" ? (
                   <div className="grid md:grid-cols-2 gap-3">
                     {p.type === "table" ? (
                       <Label text="Columns (hold Ctrl to pick several)">
-                        <select multiple value={p.query.metrics ?? []} onChange={(e) => setQ({ metrics: Array.from(e.target.selectedOptions).map((o) => o.value) })} className="w-full h-32 rounded-md bg-sunken border border-line p-1">
+                        <select multiple value={p.query.metrics ?? []} onChange={(e) => setQ({ metrics: Array.from(e.target.selectedOptions).map((o) => o.value) })} className={`${fieldClass} w-full h-32 p-1`}>
                           {metrics.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
                         </select>
                       </Label>
                     ) : (
                       <Label text="Metric">
-                        <Select className="w-full !h-8" value={p.query.metric ?? ""} onChange={(v) => setQ({ metric: v })} options={metrics.map((m) => ({ value: m.id, label: m.name }))} />
+                        <Select className="w-full" value={p.query.metric ?? ""} onChange={(v) => setQ({ metric: v })} options={metrics.map((m) => ({ value: m.id, label: m.name }))} />
                       </Label>
                     )}
                     {p.type !== "stat" && p.type !== "histogram" && (
                       <Label text="Group by">
-                        <Select className="w-full !h-8" value={p.query.groupBy ?? ""} onChange={(v) => setQ({ groupBy: v || undefined })} options={[{ value: "", label: "No breakdown" }, ...dims.map((d) => ({ value: d.id, label: d.name }))]} />
+                        <Select className="w-full" value={p.query.groupBy ?? ""} onChange={(v) => setQ({ groupBy: v || undefined })} options={[{ value: "", label: "No breakdown" }, ...dims.map((d) => ({ value: d.id, label: d.name }))]} />
                       </Label>
                     )}
                     <div className="md:col-span-2">
@@ -161,7 +161,7 @@ export default function PanelEditor({ panel, ctx, onClose, onApply }: { panel: P
                       </p>
                       <div className="flex gap-2 shrink-0">
                         <Button onClick={() => generated.mutate()} disabled={generated.isPending}>Reset from builder</Button>
-                        <Button variant="primary" onClick={() => setPreview(p)}><Play size={13} />Run</Button>
+                        <Button variant="primary" onClick={() => setPreview(p)}><Play size={14} />Run</Button>
                       </div>
                     </div>
                   </div>
@@ -179,22 +179,22 @@ export default function PanelEditor({ panel, ctx, onClose, onApply }: { panel: P
           {p.type === "text" && (
             <div className="bg-surface border border-line rounded-lg p-3">
               <Label text="Text">
-                <textarea value={p.options.markdown ?? ""} onChange={(e) => setO({ markdown: e.target.value })} className="w-full h-40 rounded-md bg-sunken border border-line p-2" />
+                <textarea value={p.options.markdown ?? ""} onChange={(e) => setO({ markdown: e.target.value })} className={`${fieldClass} block w-full h-40 p-2.5`} />
               </Label>
             </div>
           )}
         </div>
         <aside className="w-[300px] shrink-0 bg-surface border-l border-line overflow-y-auto p-3 space-y-3">
-          <h3 className="font-semibold">Panel options</h3>
+          <h2 className="font-semibold">Panel options</h2>
           <Label text="Title"><input value={p.title} onChange={(e) => setPreviewOptions({ title: e.target.value })} className={field} /></Label>
           <Label text="Description (shown on hover)"><input value={p.options.description ?? ""} onChange={(e) => setO({ description: e.target.value || undefined })} className={field} /></Label>
           <Label text="Visualization">
-            <Select className="w-full !h-8" value={p.type} onChange={typeChanged} options={PANEL_TYPES} />
+            <Select className="w-full" value={p.type} onChange={typeChanged} options={PANEL_TYPES} />
           </Label>
           {p.type === "timeseries" && (
             <>
               <Label text="Style">
-                <Select className="w-full !h-8" value={p.options.viz ?? "line"} onChange={(v) => setO({ viz: v as PanelDef["options"]["viz"] })} options={[{ value: "line", label: "Line" }, { value: "area", label: "Area" }, { value: "stacked", label: "Stacked bars" }, { value: "bars", label: "Bars" }]} />
+                <Select className="w-full" value={p.options.viz ?? "line"} onChange={(v) => setO({ viz: v as PanelDef["options"]["viz"] })} options={[{ value: "line", label: "Line" }, { value: "area", label: "Area" }, { value: "stacked", label: "Stacked bars" }, { value: "bars", label: "Bars" }]} />
               </Label>
               <div className="grid grid-cols-2 gap-2">
                 <Label text="Y axis min"><input type="number" value={p.options.yMin ?? ""} onChange={(e) => setO({ yMin: e.target.value === "" ? undefined : Number(e.target.value) })} placeholder="auto" className={field} /></Label>
@@ -207,13 +207,13 @@ export default function PanelEditor({ panel, ctx, onClose, onApply }: { panel: P
             <div className="grid grid-cols-2 gap-2">
               <Label text="Rows"><input type="number" min={1} max={100} value={p.options.limit ?? 8} onChange={(e) => setO({ limit: Number(e.target.value) })} className={field} /></Label>
               <Label text="Order">
-                <Select className="w-full !h-8" value={p.options.order ?? "desc"} onChange={(v) => setO({ order: v })} options={[{ value: "desc", label: "Highest first" }, { value: "asc", label: "Lowest first" }]} />
+                <Select className="w-full" value={p.options.order ?? "desc"} onChange={(v) => setO({ order: v })} options={[{ value: "desc", label: "Highest first" }, { value: "asc", label: "Lowest first" }]} />
               </Label>
             </div>
           )}
           {mode === "sql" && (
             <Label text="Unit of the result">
-              <Select className="w-full !h-8" value={p.options.unit ?? ""} onChange={(v) => setO({ unit: v })} options={[{ value: "", label: "None" }, { value: "%", label: "Percent" }, { value: "ms", label: "Milliseconds" }, { value: "s", label: "Seconds" }, { value: "/s", label: "Per second" }, { value: "mos", label: "MOS" }]} />
+              <Select className="w-full" value={p.options.unit ?? ""} onChange={(v) => setO({ unit: v })} options={[{ value: "", label: "None" }, { value: "%", label: "Percent" }, { value: "ms", label: "Milliseconds" }, { value: "s", label: "Seconds" }, { value: "/s", label: "Per second" }, { value: "mos", label: "MOS" }]} />
             </Label>
           )}
         </aside>

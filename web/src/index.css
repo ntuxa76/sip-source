@@ -4,49 +4,65 @@
 
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
+/*
+ * Design tokens. Components use these through the Tailwind names mapped below
+ * (bg-surface, text-ink-2, border-line ...) and never carry colours of their own.
+ * Text colours are at least 4.5:1 on every surface they are used on, in both themes,
+ * and --control is at least 3:1 so the edge of a field is always visible.
+ */
 :root {
   color-scheme: light;
-  --page: #f5f5f7;
+  --page: #f5f6f8;
   --surface: #ffffff;
   --raised: #ffffff;
-  --sunken: #f4f4f6;
-  --ink: #111114;
-  --ink-2: #4f4f5a;
-  --ink-3: #6e6e7a;
-  --line: #ebebef;
-  --line-2: #dadae1;
-  --accent: #0b5bd3;
-  --accent-wash: #eaf2fe;
-  --accent-soft: #bcd4fb;
-  --good: #107a46;
-  --good-wash: #e5f5ec;
+  --sunken: #f1f3f6;
+  --ink: #15181c;
+  --ink-2: #47505c;
+  --ink-3: #5f6979;
+  --line: #e4e7eb;
+  --line-2: #cdd3da;
+  --control: #868f9c;
+  --accent: #1a5fb4;
+  --on-accent: #ffffff;
+  --accent-strong: color-mix(in srgb, var(--accent) 84%, #000);
+  --accent-wash: color-mix(in srgb, var(--accent) 9%, var(--surface));
+  --accent-soft: color-mix(in srgb, var(--accent) 30%, var(--surface));
+  --hover: color-mix(in srgb, var(--ink) 5%, transparent);
+  --good: #1a7a45;
+  --good-wash: #e6f4ec;
   --warn: #8a5a00;
-  --warn-wash: #fdf3dc;
-  --serious: #b04a1f;
-  --serious-wash: #fdebe2;
-  --crit: #c22f36;
-  --crit-wash: #fdebec;
-  --info: #2a62c4;
-  --info-wash: #eaf1fd;
-  --card-shadow: 0 1px 2px rgb(17 17 20 / 0.04), 0 1px 1px rgb(17 17 20 / 0.02);
+  --warn-wash: #fbf1d9;
+  --serious: #ad4a17;
+  --serious-wash: #fcebe1;
+  --crit: #c0282f;
+  --crit-wash: #fcebec;
+  --info: #1f5fae;
+  --info-wash: #e8f0fa;
+  --pop-shadow: 0 6px 20px rgb(21 24 28 / 0.12), 0 1px 3px rgb(21 24 28 / 0.08);
+  --scrim: rgb(21 24 28 / 0.4);
+  --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2347505c' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
 }
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --page: #0c0c0f;
-  --surface: #16161a;
-  --raised: #1d1d22;
-  --sunken: #121215;
-  --ink: #f2f2f5;
-  --ink-2: #b9b9c4;
-  --ink-3: #8f8f9c;
-  --line: #25252c;
-  --line-2: #34343d;
-  --accent: #4d94f5;
-  --accent-wash: #13233f;
-  --accent-soft: #1e3c70;
+  --page: #0e1013;
+  --surface: #15181c;
+  --raised: #1b1f24;
+  --sunken: #1a1d22;
+  --ink: #e7eaee;
+  --ink-2: #b4bbc5;
+  --ink-3: #8b939f;
+  --line: #262b31;
+  --line-2: #373e47;
+  --control: #6e7784;
+  --accent: #6ea8f5;
+  --on-accent: #0e1013;
+  --accent-strong: color-mix(in srgb, var(--accent) 84%, #fff);
+  --accent-wash: color-mix(in srgb, var(--accent) 13%, var(--surface));
+  --accent-soft: color-mix(in srgb, var(--accent) 34%, var(--surface));
+  --hover: color-mix(in srgb, var(--ink) 7%, transparent);
   --good: #4fc27f;
-  --good-wash: #13291d;
+  --good-wash: #12281d;
   --warn: #f0b93f;
   --warn-wash: #33270c;
   --serious: #ec835a;
@@ -55,13 +71,26 @@
   --crit-wash: #3a1a1c;
   --info: #86b0f0;
   --info-wash: #182640;
-  --card-shadow: 0 1px 2px rgb(0 0 0 / 0.3);
+  --pop-shadow: 0 8px 24px rgb(0 0 0 / 0.5), 0 1px 3px rgb(0 0 0 / 0.4);
+  --scrim: rgb(0 0 0 / 0.6);
+  --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23b4bbc5' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
 }
 
+/* Square, small corners everywhere. Tags use xs, controls md, panels and dialogs lg. */
 @theme {
-  --radius-md: 0.5rem;
-  --radius-lg: 0.75rem;
-  --radius-xl: 1rem;
+  --radius-xs: 2px;
+  --radius-sm: 2px;
+  --radius-md: 3px;
+  --radius-lg: 4px;
+  --radius-xl: 4px;
+  --radius-2xl: 6px;
+
+  /* The type scale: 11 for chart ticks, 12 for meta and table headings, 13 for body and controls
+     (set on body), 15 for section titles, 20 for page titles and 24 for headline figures. */
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1rem;
+  --text-md: 0.9375rem;
+  --text-md--line-height: 1.375rem;
 }
 
 @theme inline {
@@ -74,10 +103,13 @@
   --color-ink-3: var(--ink-3);
   --color-line: var(--line);
   --color-line-2: var(--line-2);
+  --color-control: var(--control);
   --color-accent: var(--accent);
+  --color-on-accent: var(--on-accent);
+  --color-accent-strong: var(--accent-strong);
   --color-accent-wash: var(--accent-wash);
   --color-accent-soft: var(--accent-soft);
-  --shadow-card: var(--card-shadow);
+  --color-hover: var(--hover);
   --color-good: var(--good);
   --color-good-wash: var(--good-wash);
   --color-warn: var(--warn);
@@ -88,8 +120,10 @@
   --color-crit-wash: var(--crit-wash);
   --color-info: var(--info);
   --color-info-wash: var(--info-wash);
-  --font-sans: "Inter Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-mono: "JetBrains Mono Variable", ui-monospace, "SF Mono", Menlo, monospace;
+  --color-scrim: var(--scrim);
+  --shadow-pop: var(--pop-shadow);
+  --font-sans: "IBM Plex Sans Variable", "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 }
 
 html,
@@ -103,11 +137,24 @@ body {
   color: var(--ink);
   font-family: var(--font-sans);
   font-size: 13px;
-  line-height: 1.45;
+  line-height: 20px;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
-button {
+::selection {
+  background: color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-2) transparent;
+}
+
+button,
+[role="button"],
+summary {
   cursor: pointer;
 }
 
@@ -115,12 +162,39 @@ button:disabled {
   cursor: not-allowed;
 }
 
-/* In the base layer so an element's own rounded corners still win while it has focus. */
+/* One icon weight for the whole app. */
+svg.lucide {
+  stroke-width: 1.75px;
+}
+
+/* Every drop-down gets the same arrow, drawn in the text colour of the theme. */
+select:not([multiple]) {
+  appearance: none;
+  background-image: var(--chevron);
+  background-repeat: no-repeat;
+  background-position: right 7px center;
+  background-size: 14px;
+  padding-right: 26px;
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: var(--accent);
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+
+/* In the base layer so a control can still place its own ring. */
 @layer base {
   :focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 1px;
-    border-radius: 3px;
+  }
+
+  /* Keeps a focused row or field clear of the sticky table headings. */
+  #main-scroll {
+    scroll-padding-top: 44px;
   }
 }
 
@@ -140,6 +214,7 @@ button:disabled {
   font-variant-numeric: tabular-nums;
 }
 
+/* Tables: a quiet heading band, hairline rows, figures aligned in columns. */
 .data-table {
   width: 100%;
   border-collapse: separate;
@@ -151,29 +226,46 @@ button:disabled {
   top: 0;
   z-index: 1;
   background: var(--sunken);
-  color: var(--ink-3);
-  font-weight: 500;
-  font-size: 11.5px;
+  color: var(--ink-2);
+  font-weight: 600;
+  font-size: 12px;
+  line-height: 16px;
   text-align: left;
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--line);
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--line-2);
   white-space: nowrap;
 }
 
 .data-table td {
-  padding: 8px 12px;
+  padding: 6px 12px;
   border-bottom: 1px solid var(--line);
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
 
+.data-table tbody tr:last-child td {
+  border-bottom-color: transparent;
+}
+
 .data-table tbody tr:hover td {
-  background: var(--sunken);
+  background: var(--hover);
+}
+
+.data-table tbody tr[aria-selected="true"] td {
+  background: var(--accent-wash);
 }
 
 .data-table th.num,
 .data-table td.num {
   text-align: right;
+}
+
+.data-table.dense th {
+  padding-block: 4px;
+}
+
+.data-table.dense td {
+  padding-block: 2px;
 }
 
 .cm-editor {
@@ -190,22 +282,22 @@ button:disabled {
 
 /* SQL syntax colours. Each one is at least 4.5:1 on the editor and active-line backgrounds. */
 :root {
-  --code-keyword: #0b5bd3;
-  --code-number: #107a46;
+  --code-keyword: #1a5fb4;
+  --code-number: #1a7a45;
   --code-string: #a8431a;
-  --code-type: #6250d6;
-  --code-comment: #6e6e7a;
-  --code-operator: #4f4f5a;
-  --code-invalid: #c22f36;
+  --code-type: #5b49cf;
+  --code-comment: #5f6979;
+  --code-operator: #47505c;
+  --code-invalid: #c0282f;
 }
 
 :root[data-theme="dark"] {
-  --code-keyword: #4d94f5;
+  --code-keyword: #6ea8f5;
   --code-number: #4fc27f;
   --code-string: #ec835a;
-  --code-type: #9085e9;
-  --code-comment: #8f8f9c;
-  --code-operator: #b9b9c4;
+  --code-type: #a096ee;
+  --code-comment: #8b939f;
+  --code-operator: #b4bbc5;
   --code-invalid: #ef7377;
 }
 
@@ -245,28 +337,35 @@ button:disabled {
 
 .cm-scroller {
   font-family: var(--font-mono);
+  line-height: 20px;
 }
 
 .cm-gutters {
-  background: var(--surface) !important;
+  background: var(--sunken) !important;
   border-right: 1px solid var(--line) !important;
   color: var(--ink-3) !important;
 }
 
 .cm-activeLine,
 .cm-activeLineGutter {
-  background: var(--sunken) !important;
+  background: var(--hover) !important;
 }
 
 .cm-cursor {
   border-left-color: var(--ink) !important;
 }
 
+/* The two call legs and the failure colours of the message ladder, then the phases of the call
+   timeline. Phase bars carry dark text in both themes, so they stay light. */
 :root {
   --leg-a: #2a78d6;
   --leg-b: #6250d6;
   --ladder-warn: #b97c00;
   --ladder-crit: #d03b3b;
+  --phase-setup: #cdd3da;
+  --phase-ring: #f0c665;
+  --phase-talk: #7fd0a2;
+  --phase-ink: #15181c;
 }
 
 :root[data-theme="dark"] {
@@ -274,10 +373,13 @@ button:disabled {
   --leg-b: #9085e9;
   --ladder-warn: #eda100;
   --ladder-crit: #e66767;
+  --phase-setup: #9aa2ad;
+  --phase-ring: #e0b04a;
+  --phase-talk: #58b985;
 }
 
 .ladder-row:hover .ladder-hit {
-  fill: var(--sunken);
+  fill: var(--hover);
 }
 
 .ladder-row:focus-visible {
@@ -295,15 +397,6 @@ button:disabled {
 
 .react-grid-item.react-grid-placeholder {
   background: var(--accent);
-  opacity: 0.15;
-  border-radius: 12px;
-}
-
-/* Hatched fill for the small bar charts in stat cards. */
-.bar-hatch {
-  background: repeating-linear-gradient(135deg, var(--line-2) 0 1.5px, var(--sunken) 1.5px 4px);
-}
-
-.bar-hatch-accent {
-  background: repeating-linear-gradient(135deg, var(--accent) 0 1.5px, var(--accent-soft) 1.5px 4px);
+  opacity: 0.12;
+  border-radius: 4px;
 }

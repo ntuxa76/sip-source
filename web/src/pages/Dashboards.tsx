@@ -1,11 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, Navigate, useNavigate, useSearch } from "@tanstack/react-router";
-import { Braces, ChevronDown, Copy, Download, FileUp, History, Maximize2, Pencil, Plus, Radio, RotateCcw, Save, Settings2, Trash2, X } from "lucide-react";
-import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
+import { Braces, ChevronDown, Copy, Download, FileUp, History, Maximize2, Pencil, Plus, RotateCcw, Save, Settings2, Trash2, X } from "lucide-react";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import GridLayout, { useContainerWidth } from "react-grid-layout";
 import { PanelView, TimePanelForExplore } from "../components/Panel";
 import type { PanelContext } from "../components/Panel";
-import { Button, Card, Empty, ErrorNote, Loading, PageHeader, Select } from "../components/ui";
+import { Button, Card, Dialog, Empty, ErrorNote, Field, IconButton, Loading, PageHeader, Select, fieldClass, inputClass, popoverClass, useDismiss } from "../components/ui";
 import { del, get, post, put } from "../lib/api";
 import type { MetricInfo } from "../lib/api";
 import { usePrefs, useRange } from "../lib/context";
@@ -15,21 +15,7 @@ import { fmtDateTime } from "../lib/format";
 
 const PanelEditor = lazy(() => import("./PanelEditor"));
 
-function Dialog({ title, onClose, children, wide }: { title: string; onClose: () => void; children: React.ReactNode; wide?: boolean }) {
-  return (
-    <div className="fixed inset-0 z-40 bg-black/40 flex items-center justify-center p-6" onClick={onClose}>
-      <div className={`bg-raised border border-line-2 rounded-lg max-w-full max-h-full flex flex-col ${wide ? "w-[860px]" : "w-[560px]"}`} onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-4 py-3 border-b border-line">
-          <h3 className="font-semibold">{title}</h3>
-          <button type="button" onClick={onClose} aria-label="Close"><X size={16} /></button>
-        </div>
-        <div className="overflow-auto p-4">{children}</div>
-      </div>
-    </div>
-  );
-}
-
-const input = "w-full h-8 rounded-md bg-sunken border border-line px-2 focus:border-accent";
+const input = inputClass;
 
 export function DashboardList() {
   const { can } = usePrefs();
@@ -69,27 +55,27 @@ export function DashboardList() {
         title="Dashboards"
         description="Every dashboard is one JSON document: copy it to move a whole dashboard, paste it to import one."
         right={can("dashboards_edit") && (
-          <div className="flex gap-2">
-            <Button onClick={() => restore.mutate()} title="Bring back built-in dashboards that were deleted"><RotateCcw size={13} />Restore built-in</Button>
-            <Button onClick={() => setImporting(true)}><FileUp size={13} />Import JSON</Button>
-            <Button variant="primary" onClick={() => create.mutate()}><Plus size={13} />New dashboard</Button>
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={() => restore.mutate()} title="Bring back built-in dashboards that were deleted"><RotateCcw size={14} />Restore built-in</Button>
+            <Button onClick={() => setImporting(true)}><FileUp size={14} />Import JSON</Button>
+            <Button variant="primary" onClick={() => create.mutate()}><Plus size={14} />New dashboard</Button>
           </div>
         )}
       />
       {problem && <p className="text-crit mb-2">{problem}</p>}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
         {(data ?? []).map((d: any) => (
-          <div key={d.uid} className="group bg-surface border border-line rounded-lg p-3.5 hover:border-accent flex flex-col">
+          <div key={d.uid} className="group bg-surface border border-line rounded-lg p-3 hover:border-line-2 flex flex-col">
             <Link to="/dashboards/$id" params={{ id: d.uid }} search={(p: any) => ({ from: p.from, to: p.to })} className="flex-1">
-              <div className="font-semibold">{d.title}</div>
-              <p className="text-ink-2 text-xs mt-1">{d.description}</p>
+              <div className="font-semibold group-hover:text-accent">{d.title}</div>
+              <p className="text-ink-2 text-xs mt-0.5">{d.description}</p>
             </Link>
             <div className="flex items-center justify-between mt-2">
               <span className="text-ink-3 text-xs tnum">{d.panels} panels · v{d.version}</span>
-              <span className="flex gap-0.5 text-ink-3">
-                <button type="button" title="Copy JSON" aria-label={`Copy JSON of ${d.title}`} onClick={() => copyJson(d.uid)} className="p-[5px] rounded hover:bg-sunken"><Braces size={14} /></button>
-                {can("dashboards_edit") && <button type="button" title="Duplicate" aria-label={`Duplicate ${d.title}`} onClick={() => duplicate.mutate(d.uid)} className="p-[5px] rounded hover:bg-sunken"><Copy size={14} /></button>}
-                {can("dashboards_delete") && <button type="button" title="Delete" aria-label={`Delete ${d.title}`} onClick={() => confirm(`Delete "${d.title}"? This can't be undone.`) && remove.mutate(d.uid)} className="p-[5px] rounded hover:bg-sunken hover:text-crit"><Trash2 size={14} /></button>}
+              <span className="flex -mr-1.5 -mb-1">
+                <IconButton label={`Copy JSON of ${d.title}`} onClick={() => copyJson(d.uid)}><Braces size={14} aria-hidden /></IconButton>
+                {can("dashboards_edit") && <IconButton label={`Duplicate ${d.title}`} onClick={() => duplicate.mutate(d.uid)}><Copy size={14} aria-hidden /></IconButton>}
+                {can("dashboards_delete") && <IconButton label={`Delete ${d.title}`} onClick={() => confirm(`Delete "${d.title}"? This can't be undone.`) && remove.mutate(d.uid)} className="hover:text-crit"><Trash2 size={14} aria-hidden /></IconButton>}
               </span>
             </div>
           </div>
@@ -113,11 +99,10 @@ function ImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (uid: 
     }
   };
   return (
-    <Dialog title="Import dashboard JSON" onClose={onClose} wide>
-      <textarea autoFocus spellCheck={false} value={text} onChange={(e) => setText(e.target.value)} placeholder="Paste the dashboard JSON here" className="w-full h-[380px] rounded-md bg-sunken border border-line p-2 font-mono text-xs" />
+    <Dialog title="Import dashboard JSON" onClose={onClose} width={860} footer={<Button variant="primary" onClick={go} disabled={!text.trim() || run.isPending}>Import</Button>}>
+      <textarea autoFocus spellCheck={false} value={text} onChange={(e) => setText(e.target.value)} placeholder="Paste the dashboard JSON here" aria-label="Dashboard JSON" className={`${fieldClass} block w-full h-[380px] p-2.5 font-mono text-xs`} />
       <label className="flex items-center gap-2 mt-2 text-ink-2"><input type="checkbox" checked={overwrite} onChange={(e) => setOverwrite(e.target.checked)} />Replace the dashboard if this UID already exists</label>
-      {problem && <p className="text-crit mt-2">{problem}</p>}
-      <div className="flex justify-end mt-3"><Button variant="primary" onClick={go} disabled={!text.trim() || run.isPending}>Import</Button></div>
+      {problem && <p role="alert" className="text-crit mt-2">{problem}</p>}
     </Dialog>
   );
 }
@@ -135,13 +120,7 @@ function VariableSelect({ variable, value, onChange }: { variable: Variable; val
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const { data } = useQuery({ queryKey: ["field-values", variable.field], queryFn: () => get(`/fields/${variable.field}/values`), staleTime: 60_000 });
-  useEffect(() => {
-    const click = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", click);
-    return () => document.removeEventListener("mousedown", click);
-  }, []);
+  useDismiss(ref, open, useCallback(() => setOpen(false), []));
   const toggle = (x: string) => {
     if (!variable.multi) {
       onChange(value.includes(x) ? [] : [x]);
@@ -150,16 +129,16 @@ function VariableSelect({ variable, value, onChange }: { variable: Variable; val
   };
   return (
     <div className="relative" ref={ref}>
-      <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className="flex items-center h-8 rounded-md border border-line-2 bg-raised overflow-hidden">
-        <span className="px-2 h-full flex items-center bg-sunken text-ink-2 text-xs border-r border-line">{variable.label}</span>
-        <span className="px-2 text-[12.5px] max-w-[220px] truncate">{value.length === 0 ? "All" : value.join(", ")}</span>
-        <ChevronDown size={13} className="mr-1.5 text-ink-3" aria-hidden />
+      <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className="flex items-center h-8 rounded-md border border-line-2 bg-raised hover:bg-hover">
+        <span className="pl-2.5 text-ink-3">{variable.label}</span>
+        <span className="px-1.5 font-medium max-w-[220px] truncate">{value.length === 0 ? "All" : value.join(", ")}</span>
+        <ChevronDown size={14} className="mr-2 text-ink-3" aria-hidden />
       </button>
       {open && (
-        <div className="absolute z-30 mt-1 min-w-[240px] max-h-[320px] overflow-y-auto bg-raised border border-line-2 rounded-md shadow-lg py-1">
-          <button type="button" onClick={() => { onChange([]); setOpen(false); }} className="w-full text-left px-2.5 py-1 hover:bg-sunken text-ink-2">All</button>
+        <div className={`absolute z-30 mt-1 min-w-[240px] max-h-[320px] overflow-y-auto p-1 ${popoverClass}`}>
+          <button type="button" onClick={() => { onChange([]); setOpen(false); }} className="w-full text-left px-2 py-1.5 rounded-sm hover:bg-hover text-ink-2">All</button>
           {(data ?? []).map((o: any) => (
-            <label key={o.value} className="flex items-center gap-2 px-2.5 py-1 hover:bg-sunken cursor-pointer">
+            <label key={o.value} className="flex items-center gap-2 px-2 py-1.5 rounded-sm hover:bg-hover cursor-pointer">
               <input type="checkbox" checked={value.includes(o.value)} onChange={() => toggle(o.value)} />
               <span className="truncate">{o.label}</span>
             </label>
@@ -176,36 +155,35 @@ function SettingsDialog({ board, onChange, onClose, canDelete, onDelete }: { boa
   return (
     <Dialog title="Dashboard settings" onClose={onClose}>
       <div className="space-y-3">
-        <label className="block"><span className="text-xs text-ink-2">Name</span><input value={board.title} onChange={(e) => set({ title: e.target.value })} className={input} /></label>
-        <label className="block"><span className="text-xs text-ink-2">Description</span><input value={board.description} onChange={(e) => set({ description: e.target.value })} className={input} /></label>
-        <label className="block"><span className="text-xs text-ink-2">Tags, comma separated</span><input value={board.tags.join(", ")} onChange={(e) => set({ tags: e.target.value.split(",").map((t) => t.trim()).filter(Boolean) })} className={input} /></label>
+        <Field label="Name"><input value={board.title} onChange={(e) => set({ title: e.target.value })} className={input} /></Field>
+        <Field label="Description"><input value={board.description} onChange={(e) => set({ description: e.target.value })} className={input} /></Field>
+        <Field label="Tags, comma separated"><input value={board.tags.join(", ")} onChange={(e) => set({ tags: e.target.value.split(",").map((t) => t.trim()).filter(Boolean) })} className={input} /></Field>
         <div className="grid grid-cols-3 gap-2">
-          <label className="block"><span className="text-xs text-ink-2">Default from</span><input value={board.time.from} onChange={(e) => set({ time: { ...board.time, from: e.target.value } })} className={input} /></label>
-          <label className="block"><span className="text-xs text-ink-2">Default to</span><input value={board.time.to} onChange={(e) => set({ time: { ...board.time, to: e.target.value } })} className={input} /></label>
-          <label className="block"><span className="text-xs text-ink-2">Auto refresh</span><input value={board.refresh} onChange={(e) => set({ refresh: e.target.value })} placeholder="30s, 1m, or off" className={input} /></label>
+          <Field label="Default from"><input value={board.time.from} onChange={(e) => set({ time: { ...board.time, from: e.target.value } })} className={input} /></Field>
+          <Field label="Default to"><input value={board.time.to} onChange={(e) => set({ time: { ...board.time, to: e.target.value } })} className={input} /></Field>
+          <Field label="Auto refresh"><input value={board.refresh} onChange={(e) => set({ refresh: e.target.value })} placeholder="30s, 1m, or off" className={input} /></Field>
         </div>
-        <label className="block">
-          <span className="text-xs text-ink-2">Link charts on hover</span>
-          <Select className="w-full !h-8" value={board.sharedCrosshair === null ? "default" : String(board.sharedCrosshair)} onChange={(v) => set({ sharedCrosshair: v === "default" ? null : v === "true" })} options={[{ value: "default", label: "Follow user preference" }, { value: "true", label: "Always on for this dashboard" }, { value: "false", label: "Always off for this dashboard" }]} />
-        </label>
+        <Field label="Link charts on hover">
+          <Select className="w-full" value={board.sharedCrosshair === null ? "default" : String(board.sharedCrosshair)} onChange={(v) => set({ sharedCrosshair: v === "default" ? null : v === "true" })} options={[{ value: "default", label: "Follow user preference" }, { value: "true", label: "Always on for this dashboard" }, { value: "false", label: "Always off for this dashboard" }]} />
+        </Field>
         <div>
           <div className="flex items-center justify-between mb-1">
-            <span className="font-medium">Filters shown on this dashboard</span>
-            <Button onClick={() => set({ variables: [...board.variables, { name: `var${board.variables.length + 1}`, label: "Trunk", type: "field", field: "trunk", multi: true }] })}><Plus size={13} />Add</Button>
+            <span className="font-semibold">Filters shown on this dashboard</span>
+            <Button size="sm" onClick={() => set({ variables: [...board.variables, { name: `var${board.variables.length + 1}`, label: "Trunk", type: "field", field: "trunk", multi: true }] })}><Plus size={14} />Add</Button>
           </div>
           {board.variables.length === 0 && <p className="text-ink-3 text-xs">No filters. Add one so everyone can narrow all panels at once, for example by capture ID.</p>}
           {board.variables.map((v, i) => (
             <div key={i} className="flex gap-2 mb-1.5 items-center">
               <input aria-label="Filter label" value={v.label} onChange={(e) => setVar(i, { label: e.target.value })} className={input} />
               <input aria-label="Variable name" value={v.name} onChange={(e) => setVar(i, { name: e.target.value.replace(/\W/g, "_") })} className={`${input} font-mono text-xs`} />
-              <Select className="!h-8" label="Field" value={v.field} onChange={(x) => setVar(i, { field: x })} options={VARIABLE_FIELDS} />
-              <button type="button" aria-label="Remove filter" onClick={() => set({ variables: board.variables.filter((_, j) => j !== i) })} className="p-1 text-ink-3 hover:text-crit"><Trash2 size={14} /></button>
+              <Select label="Field" value={v.field} onChange={(x) => setVar(i, { field: x })} options={VARIABLE_FIELDS} />
+              <IconButton label="Remove filter" onClick={() => set({ variables: board.variables.filter((_, j) => j !== i) })} className="hover:text-crit"><Trash2 size={14} aria-hidden /></IconButton>
             </div>
           ))}
         </div>
         {canDelete && (
-          <div className="pt-2 border-t border-line">
-            <Button onClick={onDelete} className="text-crit"><Trash2 size={13} />Delete this dashboard</Button>
+          <div className="pt-3 border-t border-line">
+            <Button variant="danger" onClick={onDelete}><Trash2 size={14} />Delete this dashboard</Button>
           </div>
         )}
       </div>
@@ -228,13 +206,19 @@ function JsonDialog({ board, onApply, onClose }: { board: Dashboard; onApply: (d
     }
   };
   return (
-    <Dialog title="Dashboard JSON" onClose={onClose} wide>
-      <textarea spellCheck={false} value={text} onChange={(e) => setText(e.target.value)} className="w-full h-[440px] rounded-md bg-sunken border border-line p-2 font-mono text-xs" />
-      {problem && <p className="text-crit mt-2">{problem}</p>}
-      <div className="flex justify-end gap-2 mt-3">
-        <Button onClick={async () => { await navigator.clipboard?.writeText(text); setCopied(true); }}><Copy size={13} />{copied ? "Copied" : "Copy"}</Button>
-        <Button variant="primary" onClick={apply}>Apply</Button>
-      </div>
+    <Dialog
+      title="Dashboard JSON"
+      onClose={onClose}
+      width={860}
+      footer={
+        <>
+          <Button onClick={async () => { await navigator.clipboard?.writeText(text); setCopied(true); }}><Copy size={14} />{copied ? "Copied" : "Copy"}</Button>
+          <Button variant="primary" onClick={apply}>Apply</Button>
+        </>
+      }
+    >
+      <textarea spellCheck={false} value={text} onChange={(e) => setText(e.target.value)} aria-label="Dashboard JSON" className={`${fieldClass} block w-full h-[440px] p-2.5 font-mono text-xs`} />
+      {problem && <p role="alert" className="text-crit mt-2">{problem}</p>}
     </Dialog>
   );
 }
@@ -243,18 +227,18 @@ function VersionsDialog({ uid, tz, onClose, onRestored }: { uid: string; tz: str
   const { data } = useQuery({ queryKey: ["versions", uid], queryFn: () => get(`/dashboards/${uid}/versions`) });
   const restore = useMutation({ mutationFn: (v: number) => post(`/dashboards/${uid}/restore/${v}`), onSuccess: onRestored });
   return (
-    <Dialog title="Version history" onClose={onClose}>
-      <table className="data-table">
+    <Dialog title="Version history" onClose={onClose} width={640}>
+      <div className="-m-4 overflow-x-auto"><table className="data-table">
         <thead><tr><th className="num">Version</th><th>By</th><th>When</th><th>Note</th><th /></tr></thead>
         <tbody>
           {(data ?? []).map((v: any, i: number) => (
             <tr key={v.version}>
               <td className="num">{v.version}</td><td>{v.created_by}</td><td>{fmtDateTime(v.created_at, tz).slice(5, 16)}</td><td className="text-ink-2 whitespace-normal">{v.message}</td>
-              <td>{i > 0 && <Button onClick={() => restore.mutate(v.version)}>Restore</Button>}</td>
+              <td className="num">{i > 0 && <Button size="sm" onClick={() => restore.mutate(v.version)}>Restore</Button>}</td>
             </tr>
           ))}
         </tbody>
-      </table>
+      </table></div>
     </Dialog>
   );
 }
@@ -388,19 +372,19 @@ export function DashboardView({ id }: { id: string }) {
         description={board.description}
         right={
           draft ? (
-            <div className="flex gap-2">
-              <Button onClick={() => { const p = newPanel(draft); update((d) => ({ ...d, panels: [...d.panels, p] })); setPanelEdit(p.id); }}><Plus size={13} />Add panel</Button>
-              <Button onClick={() => setDialog("settings")}><Settings2 size={13} />Settings</Button>
-              <Button onClick={() => setDialog("json")}><Braces size={13} />JSON</Button>
+            <div className="flex flex-wrap gap-2">
+              <Button onClick={() => { const p = newPanel(draft); update((d) => ({ ...d, panels: [...d.panels, p] })); setPanelEdit(p.id); }}><Plus size={14} />Add panel</Button>
+              <Button onClick={() => setDialog("settings")}><Settings2 size={14} />Settings</Button>
+              <Button onClick={() => setDialog("json")}><Braces size={14} />JSON</Button>
               <Button onClick={() => { setDraft(null); setProblem(""); }}>Discard</Button>
-              <Button variant="primary" onClick={() => save.mutate()} disabled={save.isPending}><Save size={13} />Save</Button>
+              <Button variant="primary" onClick={() => save.mutate()} disabled={save.isPending}><Save size={14} />Save</Button>
             </div>
           ) : (
-            <div className="flex gap-2">
-              <Button onClick={() => setDialog("json")}><Download size={13} />JSON</Button>
-              {can("dashboards_edit") && <Button onClick={() => setDialog("versions")}><History size={13} />History</Button>}
-              <Button onClick={toggleKiosk}><Maximize2 size={13} />{search.kiosk ? "Exit TV mode" : "TV mode"}</Button>
-              {can("dashboards_edit") && <Button variant="primary" onClick={() => setDraft(data.dashboard)}><Pencil size={13} />Edit</Button>}
+            <div className="flex flex-wrap gap-2">
+              <Button onClick={() => setDialog("json")}><Download size={14} />JSON</Button>
+              {can("dashboards_edit") && <Button onClick={() => setDialog("versions")}><History size={14} />History</Button>}
+              <Button onClick={toggleKiosk}><Maximize2 size={14} />{search.kiosk ? "Exit TV mode" : "TV mode"}</Button>
+              {can("dashboards_edit") && <Button variant="primary" onClick={() => setDraft(data.dashboard)}><Pencil size={14} />Edit</Button>}
             </div>
           )
         }
@@ -471,36 +455,39 @@ function GettingStarted() {
     }
   };
   return (
-    <section className="mb-5 rounded-xl border border-line bg-surface shadow-card overflow-hidden">
-      <div className="flex items-start gap-3 px-5 pt-4">
-        <span className="w-9 h-9 rounded-lg bg-accent-wash text-accent flex items-center justify-center shrink-0"><Radio size={17} aria-hidden /></span>
-        <div className="flex-1 min-w-0">
-          <h2 className="text-[15px] font-semibold tracking-tight">Connect your first SIP server</h2>
-          <p className="text-ink-2 mt-0.5">Calls, registrations and quality appear here as soon as a server sends HEP. Everything is stored on this server until you add a ClickHouse.</p>
-        </div>
-        <button type="button" onClick={hide} aria-label="Hide" title="Hide" className="p-1 rounded-lg text-ink-3 hover:bg-sunken"><X size={15} /></button>
+    <Card
+      className="mb-3"
+      title="Connect your first SIP server"
+      right={
+        <IconButton label="Hide" onClick={hide} className="-mr-1.5">
+          <X size={16} aria-hidden />
+        </IconButton>
+      }
+    >
+      <div className="p-3 max-w-[92ch]">
+        <p className="text-ink-2">Calls, registrations and quality appear here as soon as a server sends HEP. Everything is stored on this server until you add a ClickHouse.</p>
+        <ol className="mt-3 space-y-3 list-decimal pl-5 marker:font-semibold marker:text-ink-2">
+          <li>
+            <span className="font-semibold">Send HEP to port 9060.</span>{" "}
+            <span className="text-ink-2">UDP or TCP, HEP version 2 or 3, to <span className="font-mono text-xs">{host}:9060</span>. Each sender appears under Sources by its address.</span>
+          </li>
+          <li>
+            <span className="font-semibold">On Asterisk, put this in <span className="font-mono text-xs">hep.conf</span>,</span>{" "}
+            <span className="text-ink-2">then load res_hep, res_hep_pjsip and res_hep_rtcp.</span>
+            <div className="relative mt-1.5 max-w-[420px]">
+              <pre className="rounded-md bg-sunken border border-line px-2.5 py-2 font-mono text-xs leading-5 overflow-x-auto">{conf}</pre>
+              <Button size="sm" className="absolute top-1.5 right-1.5" onClick={() => navigator.clipboard?.writeText(conf).then(() => setCopied(true))}>
+                {copied ? "Copied" : "Copy"}
+              </Button>
+            </div>
+          </li>
+          <li>
+            <span className="font-semibold">Name your sources.</span>{" "}
+            <span className="text-ink-2">OpenSIPS, Kamailio, FreeSWITCH and heplify work the same way. Give each sender an alias under Admin, Sources, then pick it from the source menu at the top.</span>
+          </li>
+        </ol>
       </div>
-      <ol className="grid md:grid-cols-3 gap-4 px-5 py-4">
-        <li className="rounded-lg border border-line p-3.5">
-          <div className="text-[11.5px] font-semibold text-accent uppercase tracking-wide">Step 1</div>
-          <div className="font-medium mt-1">Send HEP to port 9060</div>
-          <p className="text-ink-2 text-[12.5px] mt-1">UDP or TCP, HEP version 2 or 3, to <span className="font-mono">{host}:9060</span>. Each sender appears under Sources by its address.</p>
-        </li>
-        <li className="rounded-lg border border-line p-3.5">
-          <div className="flex items-center justify-between">
-            <div className="text-[11.5px] font-semibold text-accent uppercase tracking-wide">Step 2 · Asterisk</div>
-            <button type="button" className="text-xs text-accent hover:underline" onClick={() => navigator.clipboard?.writeText(conf).then(() => setCopied(true))}>{copied ? "Copied" : "Copy"}</button>
-          </div>
-          <pre className="mt-1.5 rounded-md bg-sunken border border-line px-2.5 py-2 font-mono text-[11.5px] leading-5 overflow-x-auto">{conf}</pre>
-          <p className="text-ink-2 text-[12px] mt-1.5">In <span className="font-mono">hep.conf</span>, then load res_hep, res_hep_pjsip and res_hep_rtcp.</p>
-        </li>
-        <li className="rounded-lg border border-line p-3.5">
-          <div className="text-[11.5px] font-semibold text-accent uppercase tracking-wide">Step 3</div>
-          <div className="font-medium mt-1">Name your sources</div>
-          <p className="text-ink-2 text-[12.5px] mt-1">OpenSIPS, Kamailio, FreeSWITCH and heplify work the same way. Give each sender an alias under Admin, Sources, then pick it from the source menu at the top.</p>
-        </li>
-      </ol>
-    </section>
+    </Card>
   );
 }
 
@@ -532,7 +519,7 @@ export function ExplorePage() {
         <Select label="Group by" value={dim} onChange={setDim} options={[{ value: "", label: "No breakdown" }, ...data.dimensions.map((d: any) => ({ value: d.id, label: d.name }))]} />
         <Select label="Visualization" value={viz} onChange={setViz} options={VIZ} />
         <form className="flex-1 min-w-[260px]" onSubmit={(e) => { e.preventDefault(); setApplied(filter); }}>
-          <input value={filter} onChange={(e) => setFilter(e.target.value)} onBlur={() => setApplied(filter)} spellCheck={false} aria-label="Filter" placeholder="Filter, e.g. capture:201 direction:outbound" className="w-full h-7 rounded-md bg-raised border border-line-2 px-2 font-mono text-xs" />
+          <input value={filter} onChange={(e) => setFilter(e.target.value)} onBlur={() => setApplied(filter)} spellCheck={false} aria-label="Filter" placeholder="Filter, e.g. capture:201 direction:outbound" className={`${inputClass} font-mono text-xs`} />
         </form>
       </div>
       {current && (

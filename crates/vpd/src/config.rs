@@ -36,7 +36,7 @@ use Kind::*;
 
 pub const DEFS: &[Def] = &[
     d("app_name", Str, "sip-source", "Branding", "Application name", "Shown in the sidebar, the login page and the browser tab.", false, true),
-    d("accent_color", Str, "", "Branding", "Accent color", "CSS color for buttons and highlights, e.g. #2a78d6. Empty keeps the default.", false, true),
+    d("accent_color", Str, "", "Branding", "Accent color", "CSS color for buttons and highlights, e.g. #1a5fb4. Empty keeps the default.", false, true),
     d("default_theme", Choice(&["system", "light", "dark"]), "system", "Branding", "Default theme", "Used until a user picks their own.", false, true),
     d("login_message", Str, "", "Branding", "Login message", "Text shown under the sign-in form.", false, true),
     d("banner_text", Str, "", "Branding", "Banner", "One line shown at the top of every page, e.g. Staging system.", false, true),

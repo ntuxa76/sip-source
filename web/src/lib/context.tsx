@@ -69,9 +69,27 @@ export function resolveTheme(choice: string | undefined): "light" | "dark" {
   return choice === "light" || choice === "dark" ? choice : systemTheme();
 }
 
+/** Black or white, whichever reads better on `hex`. */
+function readableOn(hex: string): string {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return "#ffffff";
+  const n = parseInt(m[1], 16);
+  const lin = (v: number) => (v / 255 <= 0.03928 ? v / 255 / 12.92 : ((v / 255 + 0.055) / 1.055) ** 2.4);
+  const l = 0.2126 * lin((n >> 16) & 255) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255);
+  return l > 0.179 ? "#0e1013" : "#ffffff";
+}
+
 export function applyTheme(theme: "light" | "dark", accent?: string) {
-  document.documentElement.dataset.theme = theme;
-  if (accent) document.documentElement.style.setProperty("--accent", accent);
+  const root = document.documentElement;
+  root.dataset.theme = theme;
+  // An accent chosen by the administrator replaces the built-in one, with text on it kept readable.
+  if (accent) {
+    root.style.setProperty("--accent", accent);
+    root.style.setProperty("--on-accent", readableOn(accent));
+  } else {
+    root.style.removeProperty("--accent");
+    root.style.removeProperty("--on-accent");
+  }
   try {
     localStorage.setItem("vp-theme", theme);
   } catch {

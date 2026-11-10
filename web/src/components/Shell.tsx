@@ -1,12 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, Outlet, useNavigate, useRouterState, useSearch } from "@tanstack/react-router";
-import { BarChart3, Check, ChevronDown, ChevronLeft, ChevronRight, Compass, Database, LayoutDashboard, LogOut, Menu, Moon, Radio, RefreshCw, Search, Server, Settings, Sun, Users, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { BarChart3, Check, ChevronDown, ChevronLeft, ChevronRight, Clock, Compass, Database, LayoutDashboard, LogOut, Menu, Moon, Radio, RefreshCw, Search, Server, Settings, Sun, Users, X } from "lucide-react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { get, post } from "../lib/api";
 import { rangeParam, resolveMs, usePrefs, useRange, useSource } from "../lib/context";
 import { fmtDateTime, tzOffsetMs } from "../lib/format";
-import { Button, Select } from "./ui";
+import { Button, IconButton, Select, fieldClass, popoverClass, useDismiss } from "./ui";
 
 const ADMIN_SECTIONS: [string, string][] = [
   ["users_manage", "users"],
@@ -33,25 +33,26 @@ function useNav() {
   return ["Monitor", "Troubleshoot", "System"].map((g) => ({ group: g, items: items.filter((n) => n.group === g) })).filter((g) => g.items.length > 0);
 }
 
-function initials(name: string) {
-  const parts = name.trim().split(/[\s._-]+/).filter(Boolean);
-  return ((parts[0]?.[0] ?? "?") + (parts[1]?.[0] ?? "")).toUpperCase();
-}
+/** One row in a menu or picker. */
+const menuItem = "w-full flex items-center gap-2 px-2 py-1.5 rounded-sm text-left hover:bg-hover focus-visible:-outline-offset-2";
 
-/** Capture health at a glance, for people who can see the agents page. */
-function CaptureCard() {
+/** Capture health at a glance, for people who can see the sources page. */
+function CaptureStatus() {
   const { data } = useQuery({ queryKey: ["admin", "sources"], queryFn: () => get("/admin/sources"), refetchInterval: 30_000 });
   if (!data) return null;
   const active = data.filter((a: any) => a.status !== "silent").length;
+  const silent = data.length - active;
   return (
-    <Link to="/admin/$section" params={{ section: "sources" } as any} className="block mx-3 mb-2 rounded-xl border border-line bg-sunken/60 p-3 hover:border-line-2">
+    <Link to="/admin/$section" params={{ section: "sources" } as any} className="block shrink-0 px-4 py-2.5 border-t border-line hover:bg-hover focus-visible:-outline-offset-2">
       <div className="flex items-center gap-2">
-        <span className={`w-2 h-2 rounded-full ${active > 0 ? "bg-good" : "bg-ink-3"}`} aria-hidden />
-        <span className="text-[12.5px] font-medium">Capture</span>
-        <span className="ml-auto text-[11.5px] text-ink-3 tnum">{active}/{data.length} sources</span>
+        <span className={`w-1.5 h-1.5 shrink-0 rounded-full ${active > 0 ? "bg-good" : "bg-ink-3"}`} aria-hidden />
+        <span className="font-medium">Capture</span>
+        <span className="ml-auto text-xs text-ink-3 tnum">
+          {active}/{data.length} sources
+        </span>
       </div>
-      <p className="text-[11.5px] text-ink-3 mt-1 leading-snug">
-        {data.length === 0 ? "No HEP received yet. Point your SIP servers at port 9060." : active === data.length ? "All sources are sending." : `${data.length - active} source${data.length - active === 1 ? " is" : "s are"} silent.`}
+      <p className="mt-0.5 text-xs text-ink-3">
+        {data.length === 0 ? "No HEP received yet. Point your SIP servers at port 9060." : silent === 0 ? "All sources are sending." : `${silent} source${silent === 1 ? " is" : "s are"} silent.`}
       </p>
     </Link>
   );
@@ -98,60 +99,74 @@ export function Shell() {
     );
   }
 
+  const banner = "shrink-0 px-3 sm:px-4 py-1.5 bg-warn-wash border-b border-line text-warn text-xs";
+
   return (
     <div className="flex h-full">
-      <a href="#main-scroll" onClick={skipToContent} className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:bg-raised focus:border focus:border-line-2 focus:rounded-lg focus:px-3 focus:py-2 focus:shadow-lg">
+      <a href="#main-scroll" onClick={skipToContent} className={`sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:px-3 focus:py-2 ${popoverClass}`}>
         Skip to content
       </a>
-      {menuOpen && <div className="lg:hidden fixed inset-0 z-30 bg-black/40" onClick={() => setMenuOpen(false)} aria-hidden />}
-      <aside id="sidebar" className={`${menuOpen ? "max-lg:fixed max-lg:inset-y-0 max-lg:left-0 max-lg:z-40 max-lg:shadow-xl" : "max-lg:hidden"} w-[232px] shrink-0 bg-surface border-r border-line flex flex-col`}>
-        <div className="h-[60px] flex items-center gap-2.5 px-4 shrink-0">
-          <img src="/logo.png" alt="" width={30} height={30} className="shrink-0" />
-          <span className="font-semibold text-[15px] tracking-tight truncate">{settings.app_name}</span>
-          <button type="button" onClick={() => setMenuOpen(false)} aria-label="Close menu" className="lg:hidden ml-auto p-1.5 -mr-1.5 rounded-lg hover:bg-sunken text-ink-2"><X size={18} /></button>
+      {menuOpen && <div className="lg:hidden fixed inset-0 z-30 bg-scrim" onClick={() => setMenuOpen(false)} aria-hidden />}
+      <aside id="sidebar" className={`${menuOpen ? "max-lg:fixed max-lg:inset-y-0 max-lg:left-0 max-lg:z-40 max-lg:shadow-pop" : "max-lg:hidden"} w-56 shrink-0 flex flex-col bg-surface border-r border-line`}>
+        <div className="h-12 shrink-0 flex items-center gap-2.5 px-4 border-b border-line">
+          <img src="/logo.png" alt="" width={24} height={24} className="shrink-0" />
+          <span className="text-sm font-semibold truncate">{settings.app_name}</span>
+          <IconButton label="Close menu" onClick={() => setMenuOpen(false)} className="lg:hidden ml-auto -mr-2">
+            <X size={16} aria-hidden />
+          </IconButton>
         </div>
-        <nav ref={navRef} className="flex-1 px-3 pb-3 overflow-y-auto">
+        <nav ref={navRef} aria-label="Main" className="flex-1 min-h-0 pb-3 overflow-y-auto">
           {nav.map((g) => (
-            <div key={g.group} className="mt-3 first:mt-1">
-              <div className="px-2.5 pb-1.5 text-[11.5px] font-medium uppercase tracking-[0.06em] text-ink-3">{g.group}</div>
-              <div className="space-y-0.5">
-                {g.items.map((n) => (
-                  <Link
-                    key={n.id}
-                    to={n.to}
-                    search={{ from: search.from, to: search.to, src: search.src } as any}
-                    className={`flex items-center gap-2.5 px-2.5 h-9 rounded-lg ${active(n.to) ? "bg-sunken text-ink font-medium" : "text-ink-2 hover:bg-sunken hover:text-ink"}`}
-                  >
-                    <n.icon size={16} aria-hidden className={active(n.to) ? "text-ink" : "text-ink-3"} />
-                    <span className="flex-1">{n.label}</span>
-                  </Link>
-                ))}
-              </div>
+            <div key={g.group}>
+              <div className="px-4 pt-4 pb-1 text-2xs font-semibold uppercase tracking-[0.06em] text-ink-3">{g.group}</div>
+              {g.items.map((n) => (
+                <Link
+                  key={n.id}
+                  to={n.to}
+                  search={{ from: search.from, to: search.to, src: search.src } as any}
+                  aria-current={active(n.to) ? "page" : undefined}
+                  className={`flex items-center gap-2.5 h-8 pl-3.5 pr-3 border-l-2 focus-visible:-outline-offset-2 ${
+                    active(n.to) ? "border-accent bg-accent-wash text-ink font-medium" : "border-transparent text-ink-2 hover:bg-hover hover:text-ink"
+                  }`}
+                >
+                  <n.icon size={16} aria-hidden className={`shrink-0 ${active(n.to) ? "text-accent" : "text-ink-3"}`} />
+                  <span className="truncate">{n.label}</span>
+                </Link>
+              ))}
             </div>
           ))}
         </nav>
-        {can("system_view") && <CaptureCard />}
-        <div className="px-3 py-3 border-t border-line">
-          <div className="flex items-center gap-1">
-            <Link to="/preferences" className="flex-1 min-w-0 flex items-center gap-2.5 px-1.5 py-1 rounded-lg hover:bg-sunken" title="Preferences">
-              <span className="w-8 h-8 shrink-0 rounded-full bg-accent-wash text-accent text-[12px] font-semibold flex items-center justify-center" aria-hidden>{initials(me.display_name || me.username)}</span>
-              <span className="min-w-0">
-                <span className="block truncate font-medium text-[12.5px] leading-4">{me.display_name || me.username}</span>
-                <span className="block truncate text-[11.5px] text-ink-3 leading-4">{me.role}</span>
-              </span>
-            </Link>
-            <button type="button" onClick={toggleTheme} aria-label="Switch theme" title="Switch theme" className="p-[5px] rounded-lg hover:bg-sunken text-ink-2">
-              {theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
-            </button>
-            <button type="button" onClick={() => logout.mutate()} aria-label="Sign out" title="Sign out" className="p-[5px] rounded-lg hover:bg-sunken text-ink-2"><LogOut size={15} /></button>
-          </div>
+        {can("system_view") && <CaptureStatus />}
+        <div className="shrink-0 flex items-center gap-0.5 p-2 border-t border-line">
+          <Link to="/preferences" title="Preferences" className="flex-1 min-w-0 px-2 py-1 rounded-md hover:bg-hover">
+            <span className="block truncate font-medium leading-[18px]">{me.display_name || me.username}</span>
+            <span className="block truncate text-xs text-ink-3">{me.role}</span>
+          </Link>
+          <IconButton label="Switch theme" onClick={toggleTheme}>
+            {theme === "dark" ? <Sun size={15} aria-hidden /> : <Moon size={15} aria-hidden />}
+          </IconButton>
+          <IconButton label="Sign out" onClick={() => logout.mutate()}>
+            <LogOut size={15} aria-hidden />
+          </IconButton>
         </div>
       </aside>
       <div className="flex-1 min-w-0 flex flex-col">
         <TopBar menuOpen={menuOpen} onMenu={() => setMenuOpen(true)} />
-        {settings.banner_text && <div className="bg-warn-wash text-warn text-xs px-3 sm:px-5 py-1.5 shrink-0">{settings.banner_text}</div>}
-        {noStorage && <div className="bg-warn-wash text-warn text-xs px-3 sm:px-5 py-1.5 shrink-0">No ClickHouse is selected, so captured traffic is not being stored. {can("storage_manage") ? <Link to="/admin/$section" params={{ section: "storage" } as any} className="underline">Select one on the Storage page</Link> : "Ask an administrator to select one."}.</div>}
-        <main className="flex-1 min-h-0 overflow-auto p-3 sm:p-5 focus:outline-none" id="main-scroll" tabIndex={-1}>
+        {settings.banner_text && <div className={banner}>{settings.banner_text}</div>}
+        {noStorage && (
+          <div className={banner}>
+            No ClickHouse is selected, so captured traffic is not being stored.{" "}
+            {can("storage_manage") ? (
+              <Link to="/admin/$section" params={{ section: "storage" } as any} className="underline">
+                Select one on the Storage page
+              </Link>
+            ) : (
+              "Ask an administrator to select one"
+            )}
+            .
+          </div>
+        )}
+        <main className="flex-1 min-h-0 overflow-auto p-3 sm:p-4 focus:outline-none" id="main-scroll" tabIndex={-1}>
           <Outlet />
         </main>
       </div>
@@ -199,12 +214,12 @@ function TopBar({ menuOpen, onMenu }: { menuOpen: boolean; onMenu: () => void })
     : [];
 
   return (
-    <header className="shrink-0 bg-surface border-b border-line flex flex-wrap lg:flex-nowrap items-center gap-x-3 gap-y-2 px-3 sm:px-5 py-2.5 lg:py-0 lg:h-[60px]">
-      <button id="menu-button" type="button" onClick={onMenu} aria-label="Open menu" aria-expanded={menuOpen} aria-controls="sidebar" className="lg:hidden p-1.5 -ml-1 rounded-lg hover:bg-sunken text-ink-2">
-        <Menu size={18} />
-      </button>
-      <form onSubmit={submit} className="relative flex-1 min-w-[200px] max-w-[720px]">
-        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-3" aria-hidden />
+    <header className="shrink-0 flex flex-wrap lg:flex-nowrap items-center gap-x-3 gap-y-2 px-3 sm:px-4 py-2 lg:py-0 lg:h-12 bg-surface border-b border-line">
+      <IconButton id="menu-button" label="Open menu" onClick={onMenu} aria-expanded={menuOpen} aria-controls="sidebar" className="lg:hidden -ml-1">
+        <Menu size={18} aria-hidden />
+      </IconButton>
+      <form onSubmit={submit} role="search" className="relative flex-1 min-w-[200px] max-w-[640px]">
+        <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-3 pointer-events-none" aria-hidden />
         <input
           ref={input}
           value={q}
@@ -214,16 +229,16 @@ function TopBar({ menuOpen, onMenu }: { menuOpen: boolean; onMenu: () => void })
           spellCheck={false}
           aria-label="Universal search"
           placeholder={browse ? 'Paste a number, Call-ID or IP, or filter: capture:201 trunk:"Carrier-X" status:5xx' : "Enter the customer's number"}
-          className="w-full h-9 rounded-lg bg-sunken border border-line pl-9 pr-9 font-mono text-[12.5px] placeholder:font-sans placeholder:text-ink-3 focus:bg-raised focus:border-accent"
+          className={`${fieldClass} w-full h-8 pl-8 pr-8 font-mono text-xs placeholder:font-sans placeholder:text-[13px]`}
         />
-        <kbd className="max-sm:hidden absolute right-2.5 top-1/2 -translate-y-1/2 text-[11.5px] text-ink-3 bg-raised border border-line-2 rounded-md px-1.5 leading-4">/</kbd>
+        <kbd className="max-sm:hidden absolute right-2 top-1/2 -translate-y-1/2 px-1 rounded-xs border border-line-2 font-mono text-2xs text-ink-3 pointer-events-none">/</kbd>
         {suggestions.length > 0 && (
-          <ul className="absolute z-30 top-full mt-1.5 left-0 w-[380px] max-w-[calc(100vw-24px)] bg-raised border border-line rounded-xl shadow-lg p-1">
+          <ul className={`absolute z-30 top-full mt-1 left-0 w-[380px] max-w-[calc(100vw-24px)] p-1 ${popoverClass}`}>
             {suggestions.map((f: any) => (
               <li key={f.field}>
                 <button
                   type="button"
-                  className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-sunken flex gap-3"
+                  className={`${menuItem} gap-3`}
                   onMouseDown={(e) => {
                     e.preventDefault();
                     setQ(q.slice(0, q.length - lastToken.length) + f.field + ":");
@@ -252,45 +267,42 @@ function SourcePicker() {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const alignLeft = useOpensLeft(ref, open, 280);
-  useEffect(() => {
-    const click = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", click);
-    return () => document.removeEventListener("mousedown", click);
-  }, []);
+  useDismiss(ref, open, useCallback(() => setOpen(false), []));
   const list: any[] = data ?? [];
   const picked = list.find((x) => x.ip === source);
-  const dot = (status: string) => <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${status === "silent" ? "bg-ink-3" : "bg-good"}`} aria-hidden />;
+  const pick = (ip: string) => {
+    setSource(ip);
+    setOpen(false);
+  };
   return (
     <div className="relative" ref={ref}>
       <Button onClick={() => setOpen((v) => !v)} aria-expanded={open} aria-haspopup="listbox" title="Show one HEP source">
         <Server size={14} className="text-ink-3" aria-hidden />
         <span className="max-w-[160px] truncate">{source ? (picked?.label ?? source) : "All sources"}</span>
-        <ChevronDown size={13} className="text-ink-3" aria-hidden />
+        <ChevronDown size={14} className="text-ink-3 -mr-1" aria-hidden />
       </Button>
       {open && (
-        <div className={`absolute z-30 ${alignLeft ? "left-0" : "right-0"} mt-1.5 w-[280px] max-w-[calc(100vw-24px)] bg-raised border border-line rounded-xl shadow-lg p-1`} role="listbox">
-          <button type="button" role="option" aria-selected={!source} onClick={() => { setSource(""); setOpen(false); }} className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-left hover:bg-sunken ${!source ? "font-medium" : ""}`}>
+        <div className={`absolute z-30 ${alignLeft ? "left-0" : "right-0"} mt-1 w-[280px] max-w-[calc(100vw-24px)] p-1 ${popoverClass}`} role="listbox" aria-label="HEP source">
+          <button type="button" role="option" aria-selected={!source} onClick={() => pick("")} className={`${menuItem} ${!source ? "font-medium" : ""}`}>
             <span className="flex-1">All sources</span>
             {!source && <Check size={14} className="text-accent" aria-hidden />}
           </button>
           {list.length > 0 && <div className="my-1 border-t border-line" />}
           <div className="max-h-[300px] overflow-y-auto">
             {list.map((x) => (
-              <button type="button" role="option" aria-selected={x.ip === source} key={x.ip} onClick={() => { setSource(x.ip); setOpen(false); }} className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-left hover:bg-sunken">
-                {dot(x.status)}
+              <button type="button" role="option" aria-selected={x.ip === source} key={x.ip} onClick={() => pick(x.ip)} className={menuItem}>
+                <span className={`w-1.5 h-1.5 shrink-0 rounded-full ${x.status === "silent" ? "bg-ink-3" : "bg-good"}`} aria-hidden />
                 <span className="min-w-0 flex-1">
                   <span className={`block truncate ${x.ip === source ? "font-medium" : ""}`}>{x.label}</span>
-                  {x.alias && <span className="block font-mono text-[11.5px] text-ink-3">{x.ip}</span>}
+                  {x.alias && <span className="block font-mono text-2xs text-ink-3">{x.ip}</span>}
                 </span>
                 {x.ip === source && <Check size={14} className="text-accent shrink-0" aria-hidden />}
               </button>
             ))}
           </div>
-          {list.length === 0 && <p className="px-2.5 py-2 text-xs text-ink-3">No HEP received yet. Sources appear here once your SIP servers send to port 9060.</p>}
+          {list.length === 0 && <p className="px-2 py-2 text-xs text-ink-3">No HEP received yet. Sources appear here once your SIP servers send to port 9060.</p>}
           {can("system_view") && (
-            <Link to="/admin/$section" params={{ section: "sources" } as any} onClick={() => setOpen(false)} className="block mt-1 border-t border-line px-2.5 pt-2 pb-1.5 text-xs text-accent hover:underline">
+            <Link to="/admin/$section" params={{ section: "sources" } as any} onClick={() => setOpen(false)} className="block mt-1 px-2 pt-2 pb-1.5 border-t border-line text-xs text-accent hover:underline">
               Name your sources
             </Link>
           )}
@@ -322,7 +334,7 @@ function rangeLabel(from: string, to: string, tz: string): string {
   const q = QUICK.find((x) => x.from === from && to === "now");
   if (q) return q.label;
   const short = (v: string) => (/^now/.test(v) ? v : fmtDateTime(resolveMs(v, Date.now()), tz).slice(5, 16));
-  return `${short(from)} → ${short(to)}`;
+  return `${short(from)} – ${short(to)}`;
 }
 
 function toLocalInput(ms: number, tz: string) {
@@ -350,18 +362,14 @@ export function TimePicker() {
   const ref = useRef<HTMLDivElement>(null);
   const rangeRef = useRef<HTMLDivElement>(null);
   const alignLeft = useOpensLeft(rangeRef, open, 320);
+  const fromId = useId();
+  const toId = useId();
   const now = Date.now();
   const [a, setA] = useState("");
   const [b, setB] = useState("");
   const zones = [...new Set([tz, ...settings.time_zones.split(",").map((s) => s.trim()).filter(Boolean)])];
 
-  useEffect(() => {
-    const click = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", click);
-    return () => document.removeEventListener("mousedown", click);
-  }, []);
+  useDismiss(ref, open, useCallback(() => setOpen(false), []));
 
   useEffect(() => {
     if (open) {
@@ -383,24 +391,27 @@ export function TimePicker() {
     setOpen(false);
   };
 
+  const quick = "h-7 px-2 rounded-sm text-left hover:bg-hover focus-visible:-outline-offset-2";
+
   return (
-    <div className="flex items-center gap-1.5" ref={ref}>
-      <Button variant="ghost" className="!px-1.5" onClick={() => step(-1)} aria-label="Step back one range">
-        <ChevronLeft size={15} />
+    <div className="flex items-center gap-1" ref={ref}>
+      <Button variant="ghost" size="icon" onClick={() => step(-1)} aria-label="Step back one range" title="Step back one range">
+        <ChevronLeft size={16} aria-hidden />
       </Button>
       <div className="relative" ref={rangeRef}>
-        <Button onClick={() => setOpen((v) => !v)} aria-expanded={open}>
-          <span>{rangeLabel(from, to, tz)}</span>
+        <Button onClick={() => setOpen((v) => !v)} aria-expanded={open} aria-haspopup="dialog">
+          <Clock size={14} className="text-ink-3" aria-hidden />
+          <span className="tnum">{rangeLabel(from, to, tz)}</span>
           <span className="text-ink-3 font-normal max-sm:hidden">{tz}</span>
         </Button>
         {open && (
-          <div className={`absolute z-30 ${alignLeft ? "left-0" : "right-0"} mt-1.5 w-[320px] max-w-[calc(100vw-24px)] bg-raised border border-line rounded-xl shadow-lg p-2.5`}>
-            <div className="grid grid-cols-2 gap-px">
+          <div role="dialog" aria-label="Time range" className={`absolute z-30 ${alignLeft ? "left-0" : "right-0"} mt-1 w-[320px] max-w-[calc(100vw-24px)] p-2 ${popoverClass}`}>
+            <div className="grid grid-cols-2 gap-x-1">
               {QUICK.map((q) => (
                 <button
                   key={q.from}
                   type="button"
-                  className={`text-left px-2 py-1.5 rounded-lg hover:bg-sunken ${q.from === from && to === "now" ? "font-semibold" : "text-ink-2"}`}
+                  className={`${quick} ${q.from === from && to === "now" ? "bg-accent-wash text-ink font-medium" : "text-ink-2"}`}
                   onClick={() => {
                     setRange(q.from, "now");
                     setOpen(false);
@@ -409,39 +420,43 @@ export function TimePicker() {
                   {q.label}
                 </button>
               ))}
-              <button type="button" className="text-left px-2 py-1.5 rounded-lg hover:bg-sunken text-ink-2" onClick={() => dayRange(0)}>Today</button>
-              <button type="button" className="text-left px-2 py-1.5 rounded-lg hover:bg-sunken text-ink-2" onClick={() => dayRange(1)}>Yesterday</button>
+              <button type="button" className={`${quick} text-ink-2`} onClick={() => dayRange(0)}>
+                Today
+              </button>
+              <button type="button" className={`${quick} text-ink-2`} onClick={() => dayRange(1)}>
+                Yesterday
+              </button>
             </div>
-            <div className="border-t border-line mt-2 pt-2 space-y-1.5">
-              <label className="flex items-center justify-between gap-2 text-xs text-ink-2">
+            <div className="grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-1.5 mt-2 pt-2 px-1 border-t border-line">
+              <label htmlFor={fromId} className="text-xs font-medium text-ink-2">
                 From
-                <input type="datetime-local" value={a} onChange={(e) => setA(e.target.value)} className="h-7 rounded bg-sunken border border-line px-1 text-ink" />
               </label>
-              <label className="flex items-center justify-between gap-2 text-xs text-ink-2">
+              <input id={fromId} type="datetime-local" value={a} onChange={(e) => setA(e.target.value)} className={`${fieldClass} w-full h-7 px-1.5 tnum`} />
+              <label htmlFor={toId} className="text-xs font-medium text-ink-2">
                 To
-                <input type="datetime-local" value={b} onChange={(e) => setB(e.target.value)} className="h-7 rounded bg-sunken border border-line px-1 text-ink" />
               </label>
-              <div className="flex items-center justify-between gap-2">
-                <Select label="Time zone" value={tz} onChange={(v) => savePrefs({ tz: v })} options={zones.map((t) => ({ value: t, label: t }))} />
-                <Button
-                  variant="primary"
-                  onClick={() => {
-                    setRange(rangeParam(fromLocalInput(a, tz)), rangeParam(fromLocalInput(b, tz)));
-                    setOpen(false);
-                  }}
-                >
-                  Apply
-                </Button>
-              </div>
+              <input id={toId} type="datetime-local" value={b} onChange={(e) => setB(e.target.value)} className={`${fieldClass} w-full h-7 px-1.5 tnum`} />
+            </div>
+            <div className="flex items-center justify-between gap-2 mt-2 px-1 pb-1">
+              <Select label="Time zone" value={tz} onChange={(v) => savePrefs({ tz: v })} options={zones.map((t) => ({ value: t, label: t }))} className="min-w-0" />
+              <Button
+                variant="primary"
+                onClick={() => {
+                  setRange(rangeParam(fromLocalInput(a, tz)), rangeParam(fromLocalInput(b, tz)));
+                  setOpen(false);
+                }}
+              >
+                Apply
+              </Button>
             </div>
           </div>
         )}
       </div>
-      <Button variant="ghost" className="!px-1.5" onClick={() => step(1)} aria-label="Step forward one range" disabled={to === "now"}>
-        <ChevronRight size={15} />
+      <Button variant="ghost" size="icon" onClick={() => step(1)} aria-label="Step forward one range" title="Step forward one range" disabled={to === "now"}>
+        <ChevronRight size={16} aria-hidden />
       </Button>
-      <span className="flex items-center gap-1 text-ink-3">
-        <RefreshCw size={13} aria-hidden />
+      <span className="flex items-center gap-1.5 ml-1 text-ink-3">
+        <RefreshCw size={14} aria-hidden />
         <Select label="Auto refresh" value={String(refreshMs || 0)} onChange={(v) => setRefreshMs(v === "0" ? false : Number(v))} options={REFRESH} />
       </span>
     </div>

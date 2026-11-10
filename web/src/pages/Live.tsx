@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { Pause, Play, Square, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Badge, Button, Card, Empty, PageHeader } from "../components/ui";
+import { Button, Card, Empty, PageHeader, Status, fieldClass } from "../components/ui";
 import { put } from "../lib/api";
 import { usePrefs, useSource } from "../lib/context";
 import { fmtMicros, usOf } from "../lib/format";
@@ -122,33 +122,33 @@ export function LivePage() {
         description={`Runs only while started, and stops by itself after ${settings.live_idle_minutes} minutes.`}
         right={
           <div className="flex flex-wrap items-center gap-2">
-            <Badge tone={streaming ? (connected ? (paused ? "warn" : "good") : "info") : "neutral"}>{streaming ? (connected ? (paused ? "Paused" : "Streaming") : "Connecting") : "Stopped"}</Badge>
-            <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Filter number, node, UA, capture ID" aria-label="Filter dialogs" className="h-7 rounded-md bg-raised border border-line-2 px-2 text-xs w-[230px]" />
+            <span role="status" className="mr-1"><Status tone={streaming ? (connected ? (paused ? "warn" : "good") : "info") : "neutral"}>{streaming ? (connected ? (paused ? "Paused" : "Streaming") : "Connecting") : "Stopped"}</Status></span>
+            <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Filter number, node, UA, capture ID" aria-label="Filter dialogs" className={`${fieldClass} h-8 px-2.5 w-[250px] max-w-full`} />
             {streaming ? (
               <>
-                <Button onClick={() => setPaused(!paused)}>{paused ? <Play size={13} /> : <Pause size={13} />}{paused ? "Resume" : "Pause"}</Button>
-                <Button onClick={() => { setStreaming(false); setPaused(false); }}><Square size={13} />Stop</Button>
+                <Button onClick={() => setPaused(!paused)}>{paused ? <Play size={14} /> : <Pause size={14} />}{paused ? "Resume" : "Pause"}</Button>
+                <Button onClick={() => { setStreaming(false); setPaused(false); }}><Square size={14} />Stop</Button>
               </>
             ) : (
-              <Button variant="primary" onClick={() => setStreaming(true)}><Play size={13} />Start</Button>
+              <Button variant="primary" onClick={() => setStreaming(true)}><Play size={14} />Start</Button>
             )}
-            <Button onClick={() => { setDialogs([]); setSelected(null); }}><Trash2 size={13} />Clear</Button>
+            <Button onClick={() => { setDialogs([]); setSelected(null); }}><Trash2 size={14} />Clear</Button>
           </div>
         }
       />
       {note && <p className="text-ink-2 mb-2">{note}</p>}
       <div className="grid lg:grid-cols-2 gap-3 items-start">
         <Card>
-          <div className="overflow-auto h-[calc(100vh-170px)]">
+          <div className="overflow-auto h-[calc(100vh-150px)]">
             {shown.length === 0 ? <Empty>{streaming ? "Waiting for traffic. New dialogs appear within a few seconds." : "Press Start to begin."}</Empty> : (
               <table className="data-table text-xs">
                 <thead><tr><th>From</th><th>To</th><th>State</th><th className="num">Msgs</th><th>Last</th><th>Node</th></tr></thead>
                 <tbody>
                   {shown.map((d) => (
-                    <tr key={d.id} className={`cursor-pointer ${selected === d.id ? "[&>td]:bg-accent-wash" : ""}`} onClick={() => setSelected(d.id)}>
+                    <tr key={d.id} className="cursor-pointer" aria-selected={selected === d.id} onClick={() => setSelected(d.id)}>
                       <td className="font-mono">{d.caller}</td>
                       <td className="font-mono">{d.callee}</td>
-                      <td><Badge tone={d.state === "answered" ? "good" : d.state === "failed" || d.state === "timeout" ? "crit" : "info"}>{d.state}</Badge></td>
+                      <td><Status tone={d.state === "answered" ? "good" : d.state === "failed" || d.state === "timeout" ? "crit" : "info"}>{d.state}</Status></td>
                       <td className="num">{d.events.length}</td>
                       <td>{d.events[d.events.length - 1].label}</td>
                       <td className="text-ink-2">{d.node}</td>
@@ -163,15 +163,15 @@ export function LivePage() {
           title={current ? `${current.caller} → ${current.callee}` : "Select a dialog"}
           right={current && <Link to="/search" search={{ q: `callid:${current.id}` } as any} className="text-accent hover:underline">Find this call</Link>}
         >
-          <div className="overflow-auto h-[calc(100vh-208px)] px-3.5 pb-3">
+          <div className="overflow-auto h-[calc(100vh-191px)] px-3 pb-3">
             {!current ? <Empty>The message list for the selected dialog updates here as it happens.</Empty> : (
               <table className="w-full text-xs">
                 <tbody>
                   {current.events.map((e, i) => (
-                    <tr key={i} className="border-b border-line">
-                      <td className="py-1 pr-3 font-mono text-ink-2 whitespace-nowrap">{fmtMicros(e.ts, tz).slice(0, 12)}</td>
-                      <td className="py-1 pr-3 whitespace-nowrap text-ink-2">{e.from} → {e.to}</td>
-                      <td className="py-1 pr-3 font-mono text-ink-3">{e.capture_id || ""}</td>
+                    <tr key={i} className="border-b border-line last:border-b-0">
+                      <td className="py-1.5 pr-3 font-mono text-ink-2 whitespace-nowrap">{fmtMicros(e.ts, tz).slice(0, 12)}</td>
+                      <td className="py-1.5 pr-3 whitespace-nowrap text-ink-2">{e.from} → {e.to}</td>
+                      <td className="py-1.5 pr-3 font-mono text-ink-3">{e.capture_id || ""}</td>
                       <td className={`py-1 font-medium ${e.class === "server_error" ? "text-crit" : e.class === "client_error" ? "text-warn" : ""}`}>{e.label}{e.retx ? ` (retx ${e.retx})` : ""}</td>
                     </tr>
                   ))}

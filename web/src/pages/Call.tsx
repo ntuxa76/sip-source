@@ -4,9 +4,9 @@ import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { Copy, Download, FileText, X } from "lucide-react";
 import * as echarts from "echarts/core";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useEChart } from "../components/charts";
+import { FONT, chrome, streamColors, tooltipChrome, useEChart } from "../components/charts";
 import { Ladder } from "../components/Ladder";
-import { Badge, Button, CallStateBadge, Card, Empty, ErrorNote, FindingBadge, KV, Loading, MosCell, RegStatus, SeverityBadge, StatusChip, Tabs, Toggle } from "../components/ui";
+import { Badge, Button, CallStateBadge, IconButton, Card, Empty, ErrorNote, FindingBadge, KV, Loading, MosCell, RegStatus, SeverityBadge, StatusChip, Tabs, Toggle } from "../components/ui";
 import { get } from "../lib/api";
 import type { Call, Flow, Msg } from "../lib/api";
 import { usePrefs } from "../lib/context";
@@ -54,7 +54,7 @@ export function CallPage({ uid }: { uid: string }) {
     <div className="space-y-3">
       <Summary call={call} tz={tz} scrub={scrub} />
       <Card>
-        <div className="px-2">
+        <div>
           <Tabs tabs={TABS.map((t) => (t.id === "diagnostics" && call.findings.length ? { ...t, label: `Diagnostics (${call.findings.length})` } : t))} active={tab} onChange={setTab} />
         </div>
         <div className="p-3">
@@ -77,7 +77,7 @@ export function CallPage({ uid }: { uid: string }) {
 function Copyable({ value }: { value: string }) {
   return (
     // The padding gives a 24 px target; the negative margins keep the icon where it was.
-    <button type="button" className="inline-flex p-1.5 -my-1.5 -mr-1.5 -ml-0.5 rounded text-ink-3 hover:text-ink align-middle" aria-label={`Copy ${value}`} title="Copy" onClick={() => navigator.clipboard?.writeText(value)}>
+    <button type="button" className="inline-flex p-1.5 -my-1.5 -mr-1.5 -ml-0.5 rounded-sm text-ink-3 hover:text-ink align-middle" aria-label={`Copy ${value}`} title="Copy" onClick={() => navigator.clipboard?.writeText(value)}>
       <Copy size={12} />
     </button>
   );
@@ -87,9 +87,9 @@ function Summary({ call: c, tz, scrub }: { call: Call; tz: string; scrub: (s: st
   const crit = ["caller", "callee"] as const;
   return (
     <Card>
-      <div className="px-4 pt-3 pb-3.5">
+      <div className="p-3">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-          <h1 className="text-lg font-semibold font-mono tracking-tight">
+          <h1 className="text-md font-semibold font-mono">
             {scrub(c.caller_n)} <span className="text-ink-3 font-sans">→</span> {scrub(c.callee_n)}
           </h1>
           <CallStateBadge state={c.state} />
@@ -165,7 +165,7 @@ function FlowTab({ flow, selected, onSelect, tz, scrub, call }: { flow: Flow; se
   return (
     <div>
       {skew && (
-        <div className="mb-2 px-2.5 py-1.5 rounded bg-info-wash text-info text-xs">
+        <div className="mb-2 px-2.5 py-1.5 rounded-md bg-info-wash text-info text-xs">
           Capture times disagree between agents on this call, so message order may be slightly off.
         </div>
       )}
@@ -177,7 +177,7 @@ function FlowTab({ flow, selected, onSelect, tz, scrub, call }: { flow: Flow; se
         <div className="flex-1" />
         <span className="text-ink-3 text-xs tnum">{visible.length} of {flow.messages.length} messages, ↑↓ to step</span>
         <Button onClick={() => setTimeMode(timeMode === "absolute" ? "delta" : "absolute")}>{timeMode === "absolute" ? "Show deltas" : "Show times"}</Button>
-        <Button onClick={exportSvg}><Download size={13} />SVG</Button>
+        <Button onClick={exportSvg}><Download size={14} />SVG</Button>
       </div>
       <Ladder columns={flow.columns} messages={visible} selected={selected} onSelect={onSelect} tz={tz} timeMode={timeMode} svgRef={svg} scrub={scrub} />
     </div>
@@ -202,11 +202,11 @@ function Drawer({ m, flow, tz, onClose, scrub }: { m: Msg; flow: Flow; tz: strin
   ];
   const active = tabs.some((t) => t.id === tab) ? tab : "headers";
   return (
-    <aside className="fixed top-0 right-0 bottom-0 w-[520px] max-w-[92vw] z-30 bg-raised border-l border-line-2 shadow-xl flex flex-col" aria-label="Message detail">
-      <header className="px-4 pt-3 pb-2 border-b border-line">
+    <aside className="fixed top-0 right-0 bottom-0 w-[520px] max-w-[92vw] z-30 bg-raised border-l border-line-2 shadow-pop flex flex-col" aria-label="Message detail">
+      <header className="px-3 pt-2 pb-2 border-b border-line">
         <div className="flex items-center justify-between gap-3">
           <h2 className="font-semibold font-mono truncate">{m.label}</h2>
-          <button type="button" onClick={onClose} aria-label="Close message detail" className="p-1 rounded hover:bg-sunken"><X size={16} /></button>
+          <IconButton label="Close message detail" onClick={onClose} className="-mr-1"><X size={16} aria-hidden /></IconButton>
         </div>
         <div className="text-xs text-ink-2 mt-0.5">
           {scrub(flow.columns[m.src].name)} → {scrub(flow.columns[m.dst].name)} · leg {m.leg} · CSeq {m.cseq} {m.cseq_method}
@@ -233,8 +233,8 @@ function Drawer({ m, flow, tz, onClose, scrub }: { m: Msg; flow: Flow; tz: strin
         )}
         {active === "raw" && (
           <div>
-            <Button className="mb-2" onClick={() => navigator.clipboard?.writeText(scrub(m.raw).replace(/\r/g, ""))}><Copy size={13} />Copy</Button>
-            <pre className="font-mono text-[11.5px] whitespace-pre-wrap break-all">{scrub(m.raw).replace(/\r/g, "")}</pre>
+            <Button className="mb-2" onClick={() => navigator.clipboard?.writeText(scrub(m.raw).replace(/\r/g, ""))}><Copy size={14} />Copy</Button>
+            <pre className="font-mono text-xs whitespace-pre-wrap break-all">{scrub(m.raw).replace(/\r/g, "")}</pre>
           </div>
         )}
         {active === "sdp" && m.sdp && (
@@ -251,7 +251,7 @@ function Drawer({ m, flow, tz, onClose, scrub }: { m: Msg; flow: Flow; tz: strin
             <div className="space-y-2">
               <p className="text-xs text-ink-3">Compared with the previous capture of this message.</p>
               {m.diff.map((d, i) => (
-                <div key={i} className="text-xs border border-line rounded p-2">
+                <div key={i} className="text-xs border border-line rounded-sm p-2">
                   <div className="flex gap-2 items-center mb-1"><Badge tone={d.op === "added" ? "good" : d.op === "removed" ? "crit" : "warn"}>{d.op}</Badge><span className="font-medium">{d.name === ":start-line" ? "Request line" : d.name}</span></div>
                   {d.old && <div className="font-mono break-all text-ink-2">− {scrub(d.old)}</div>}
                   {d.new && <div className="font-mono break-all">+ {scrub(d.new)}</div>}
@@ -286,9 +286,9 @@ function TimelineTab({ call: c, flow, tz }: { call: Call; flow: Flow; tz: string
     const seg: { from: number; to: number; label: string; color: string }[] = [];
     const ringUs = ring ? usOf(ring.ts) : null;
     const okUs = ok ? usOf(ok.ts) : null;
-    seg.push({ from: first, to: ringUs ?? okUs ?? end, label: "Setup", color: "var(--line-2)" });
-    if (ringUs) seg.push({ from: ringUs, to: okUs ?? end, label: "Ringing", color: "#eda100" });
-    if (okUs) seg.push({ from: okUs, to: end, label: "Talking", color: "#1baf7a" });
+    seg.push({ from: first, to: ringUs ?? okUs ?? end, label: "Setup", color: "var(--phase-setup)" });
+    if (ringUs) seg.push({ from: ringUs, to: okUs ?? end, label: "Ringing", color: "var(--phase-ring)" });
+    if (okUs) seg.push({ from: okUs, to: end, label: "Talking", color: "var(--phase-talk)" });
     return { leg, seg };
   };
   const holds = flow.messages.filter((m) => m.leg === "A" && m.sdp?.direction === "sendonly" && m.src === 0);
@@ -299,7 +299,7 @@ function TimelineTab({ call: c, flow, tz }: { call: Call; flow: Flow; tz: string
     <div className="pl-14 pr-3">
       <div className="relative h-5 border-b border-line-2 mb-3">
         {ticks.map((t, i) => (
-          <span key={i} className="absolute text-[11.5px] text-ink-3 tnum -translate-x-1/2" style={{ left: pct(t) }}>{fmtHMS(t / 1000, tz)}</span>
+          <span key={i} className="absolute text-xs text-ink-3 tnum -translate-x-1/2" style={{ left: pct(t) }}>{fmtHMS(t / 1000, tz)}</span>
         ))}
       </div>
       <div className="space-y-3">
@@ -307,8 +307,8 @@ function TimelineTab({ call: c, flow, tz }: { call: Call; flow: Flow; tz: string
           <div key={r.leg} className="relative h-7">
             <span className="absolute -left-12 top-1 text-xs text-ink-2">{r.leg} leg</span>
             {r.seg.map((s) => (
-              <div key={s.label} title={`${s.label}: ${fmtDuration((s.to - s.from) / 1000)}`} className="absolute top-0 bottom-0 rounded-sm flex items-center overflow-hidden" style={{ left: pct(s.from), width: width(s.from, s.to), background: s.color }}>
-                <span className="px-1.5 text-[11.5px] text-black/80 truncate">{s.label}</span>
+              <div key={s.label} title={`${s.label}: ${fmtDuration((s.to - s.from) / 1000)}`} className="absolute top-0 bottom-0 flex items-center overflow-hidden" style={{ left: pct(s.from), width: width(s.from, s.to), background: s.color }}>
+                <span className="px-1.5 text-xs font-medium text-[var(--phase-ink)] truncate">{s.label}</span>
               </div>
             ))}
             {r.leg === "A" && holds.map((m) => <div key={m.idx} title="Hold" className="absolute -top-1 -bottom-1 w-0.5 bg-[var(--leg-b)]" style={{ left: pct(usOf(m.ts)) }} />)}
@@ -316,7 +316,7 @@ function TimelineTab({ call: c, flow, tz }: { call: Call; flow: Flow; tz: string
         ))}
       </div>
       <div className="flex gap-4 mt-4 text-xs text-ink-2">
-        {[["Setup", "var(--line-2)"], ["Ringing", "#eda100"], ["Talking", "#1baf7a"]].map(([l, col]) => <span key={l} className="flex items-center gap-1.5"><i className="w-2.5 h-2.5 rounded-sm inline-block" style={{ background: col }} />{l}</span>)}
+        {[["Setup", "var(--phase-setup)"], ["Ringing", "var(--phase-ring)"], ["Talking", "var(--phase-talk)"]].map(([l, col]) => <span key={l} className="flex items-center gap-1.5"><i className="w-2.5 h-2.5 rounded-sm inline-block" style={{ background: col }} />{l}</span>)}
         {holds.length > 0 && <span className="flex items-center gap-1.5"><i className="w-0.5 h-3 inline-block bg-[var(--leg-b)]" />Hold</span>}
       </div>
     </div>
@@ -357,17 +357,17 @@ function MessagesTab({ flow, tz, onSelect, scrub }: { flow: Flow; tz: string; on
 function StreamChart({ title, streams, field, unit, height = 130 }: { title: string; streams: any[]; field: number; unit: string; height?: number }) {
   const { theme, tz } = usePrefs();
   const option = useMemo(() => {
-    const dark = theme === "dark";
-    const colors = dark ? ["#3987e5", "#d95926"] : ["#2a78d6", "#eb6834"];
-    const [muted, grid, axis, raised, ink] = dark ? ["#9a9992", "#2c2c2a", "#383835", "#232322", "#f0efec"] : ["#6b6a65", "#e1e0d9", "#c3c2b7", "#ffffff", "#0b0b0b"];
+    const colors = streamColors(theme);
+    const c = chrome(theme);
+    const { muted, grid, axis } = c;
     return {
       animation: false,
-      textStyle: { fontFamily: "'Inter Variable', sans-serif" },
+      textStyle: { fontFamily: FONT },
       grid: { left: 40, right: 8, top: 6, bottom: 18 },
       xAxis: { type: "time", axisLine: { lineStyle: { color: axis } }, axisTick: { show: false }, splitLine: { show: false }, axisLabel: { color: muted, fontSize: 11, hideOverlap: true, formatter: (v: number) => fmtHMS(v, tz) } },
       yAxis: { type: "value", scale: field === 1, splitNumber: 3, axisLine: { show: false }, axisTick: { show: false }, splitLine: { lineStyle: { color: grid } }, axisLabel: { color: muted, fontSize: 11 } },
-      tooltip: { trigger: "axis", confine: true, backgroundColor: raised, borderColor: axis, textStyle: { color: ink, fontSize: 12 }, formatter: (p: any[]) => `${fmtHMS(p[0].value[0], tz)}<br/>${p.map((x) => `${x.seriesName}: <b>${x.value[1].toFixed(field === 1 ? 2 : 1)}${unit}</b>`).join("<br/>")}` },
-      series: streams.filter((s) => s.points.length).map((s, i) => ({ name: s.label, type: "line", showSymbol: false, lineStyle: { width: 2, color: colors[i] }, itemStyle: { color: colors[i] }, data: s.points.map((p: number[]) => [p[0], Number(p[field].toFixed(3))]) })),
+      tooltip: { trigger: "axis", confine: true, ...tooltipChrome(c), formatter: (p: any[]) => `${fmtHMS(p[0].value[0], tz)}<br/>${p.map((x) => `${x.seriesName}: <b>${x.value[1].toFixed(field === 1 ? 2 : 1)}${unit}</b>`).join("<br/>")}` },
+      series: streams.filter((s) => s.points.length).map((s, i) => ({ name: s.label, type: "line", showSymbol: false, lineStyle: { width: 1.5, color: colors[i] }, itemStyle: { color: colors[i] }, data: s.points.map((p: number[]) => [p[0], Number(p[field].toFixed(3))]) })),
     };
   }, [streams, field, unit, theme, tz]);
   const { ref } = useEChart(option, "call-media");
@@ -382,6 +382,7 @@ function StreamChart({ title, streams, field, unit, height = 130 }: { title: str
 function MediaTab({ uid, tz, sub }: { uid: string; tz: string; sub: string }) {
   const { data, error } = useQuery({ queryKey: ["media", uid, sub], queryFn: () => get(`/calls/${uid}/media${sub}`) });
   void tz;
+  const { theme } = usePrefs();
   if (error) return <ErrorNote error={error} />;
   if (!data) return <Loading />;
   const has = data.streams.some((s: any) => s.points.length);
@@ -413,8 +414,8 @@ function MediaTab({ uid, tz, sub }: { uid: string; tz: string; sub: string }) {
       )}
       {has && (
         <div className="flex gap-4 text-xs text-ink-2">
-          <span className="flex items-center gap-1.5"><i className="w-2.5 h-2.5 rounded-sm inline-block" style={{ background: "#2a78d6" }} />Caller → callee</span>
-          <span className="flex items-center gap-1.5"><i className="w-2.5 h-2.5 rounded-sm inline-block" style={{ background: "#eb6834" }} />Callee → caller</span>
+          <span className="flex items-center gap-1.5"><i className="w-2.5 h-2.5 rounded-sm inline-block" style={{ background: streamColors(theme)[0] }} />Caller → callee</span>
+          <span className="flex items-center gap-1.5"><i className="w-2.5 h-2.5 rounded-sm inline-block" style={{ background: streamColors(theme)[1] }} />Callee → caller</span>
           <span className="text-ink-3">Media anchored on {data.media_node}</span>
         </div>
       )}

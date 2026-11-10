@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { CircleCheck, CircleX, KeyRound, Lock, Pencil, Plus, Trash2, X } from "lucide-react";
 import { useMemo, useState } from "react";
-import { Badge, Button, Card, ErrorNote, KV, Loading, PageHeader, Select, Tabs, Toggle } from "../components/ui";
+import { Badge, Button, Card, ErrorNote, KV, Loading, PageHeader, Select, Tabs, Toggle, IconButton, Status, fieldClass, inputClass } from "../components/ui";
 import { del, get, post, put } from "../lib/api";
 import { usePrefs } from "../lib/context";
 import { fmtDateTime } from "../lib/format";
@@ -17,7 +17,7 @@ const SECTIONS = [
   { id: "audit", label: "Audit log", perm: "audit_read" },
 ];
 
-const field = "w-full h-8 rounded-md bg-sunken border border-line px-2 focus:border-accent";
+const field = inputClass;
 
 function useApi(section: string, enabled = true) {
   return useQuery({ queryKey: ["admin", section], queryFn: () => get(section === "audit" ? "/admin/audit" : `/admin/${section}`), enabled });
@@ -25,11 +25,11 @@ function useApi(section: string, enabled = true) {
 
 function SidePanel({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   return (
-    <div className="fixed inset-0 z-40 bg-black/40 flex justify-end" onClick={onClose}>
-      <aside className="w-[560px] max-w-full bg-raised border-l border-line-2 h-full flex flex-col" onClick={(e) => e.stopPropagation()}>
-        <header className="flex items-center justify-between px-4 h-12 border-b border-line shrink-0">
-          <h3 className="font-semibold">{title}</h3>
-          <button type="button" onClick={onClose} aria-label="Close"><X size={16} /></button>
+    <div className="fixed inset-0 z-40 bg-scrim flex justify-end" onClick={onClose}>
+      <aside role="dialog" aria-modal="true" aria-label={title} className="w-[560px] max-w-full bg-raised border-l border-line-2 shadow-pop h-full flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <header className="flex items-center justify-between gap-3 pl-4 pr-2 h-12 border-b border-line shrink-0">
+          <h2 className="text-sm font-semibold truncate">{title}</h2>
+          <IconButton label="Close" onClick={onClose}><X size={16} aria-hidden /></IconButton>
         </header>
         <div className="flex-1 overflow-y-auto p-4">{children}</div>
       </aside>
@@ -40,7 +40,7 @@ function SidePanel({ title, onClose, children }: { title: string; onClose: () =>
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <span className="text-xs text-ink-2">{label}</span>
+      <span className="block mb-1 text-xs font-medium text-ink-2">{label}</span>
       {children}
     </label>
   );
@@ -54,7 +54,7 @@ export function AdminPage({ section }: { section: string }) {
     <div>
       <PageHeader title="Admin" />
       <Card>
-        <div className="px-2"><Tabs tabs={tabs} active={section} onChange={(id) => navigate({ to: "/admin/$section", params: { section: id } } as any)} /></div>
+        <div><Tabs tabs={tabs} active={section} onChange={(id) => navigate({ to: "/admin/$section", params: { section: id } } as any)} /></div>
         {section === "users" && <Users />}
         {section === "roles" && <Roles />}
         {section === "settings" && <SettingsPanel />}
@@ -103,7 +103,7 @@ function PermissionOverrides({ catalogue, rolePerms, grants, denies, onChange }:
             const on = st === "allow" || (st === "inherit" && inherited);
             return (
               <div key={p.id} className="flex items-center gap-2 py-0.5" title={p.help}>
-                {on ? <CircleCheck size={13} className="text-good shrink-0" aria-label="Allowed" /> : <CircleX size={13} className="text-ink-3 shrink-0" aria-label="Not allowed" />}
+                {on ? <CircleCheck size={14} className="text-good shrink-0" aria-label="Allowed" /> : <CircleX size={14} className="text-ink-3 shrink-0" aria-label="Not allowed" />}
                 <span className="flex-1 truncate">{p.label}</span>
                 <Select label={`Override for ${p.label}`} value={st} onChange={(v) => set(p.id, v as Tri)} options={[{ value: "inherit", label: inherited ? "From role: allowed" : "From role: not allowed" }, { value: "allow", label: "Allow" }, { value: "deny", label: "Deny" }]} />
               </div>
@@ -149,7 +149,7 @@ function Users() {
     <div>
       <div className="flex items-center justify-between px-3 py-2">
         <span className="text-ink-3 text-xs">{users.data.length} users</span>
-        <Button variant="primary" onClick={() => { setProblem(""); setEditing({ ...blankUser, role_id: roles.data.find((r: any) => !r.locked)?.id ?? roles.data[0].id }); }}><Plus size={13} />Add user</Button>
+        <Button variant="primary" onClick={() => { setProblem(""); setEditing({ ...blankUser, role_id: roles.data.find((r: any) => !r.locked)?.id ?? roles.data[0].id }); }}><Plus size={14} />Add user</Button>
       </div>
       {problem && !editing && !resetFor && <p className="text-crit px-3 pb-2">{problem}</p>}
       <div className="overflow-x-auto">
@@ -164,9 +164,9 @@ function Users() {
                 <td className="text-ink-2 text-xs">{u.grants.length + u.denies.length === 0 ? "None" : `${u.grants.length} allowed, ${u.denies.length} denied`}</td>
                 <td>{u.last_login ? fmtDateTime(u.last_login, tz).slice(0, 16) : "Never"}</td>
                 <td className="text-right">
-                  <Button variant="ghost" onClick={() => { setProblem(""); setEditing({ ...blankUser, ...u, password: "" }); }}><Pencil size={13} />Edit</Button>
-                  <Button variant="ghost" onClick={() => { setProblem(""); setResetFor(u); }}><KeyRound size={13} />Password</Button>
-                  {u.id !== me.id && <Button variant="ghost" onClick={() => confirm(`Delete ${u.username}?`) && remove.mutate(u.id)}><Trash2 size={13} /></Button>}
+                  <Button variant="ghost" onClick={() => { setProblem(""); setEditing({ ...blankUser, ...u, password: "" }); }}><Pencil size={14} />Edit</Button>
+                  <Button variant="ghost" onClick={() => { setProblem(""); setResetFor(u); }}><KeyRound size={14} />Password</Button>
+                  {u.id !== me.id && <Button variant="ghost" onClick={() => confirm(`Delete ${u.username}?`) && remove.mutate(u.id)}><Trash2 size={14} /></Button>}
                 </td>
               </tr>
             ))}
@@ -181,11 +181,11 @@ function Users() {
               <Row label="Display name"><input value={editing.display_name} onChange={(e) => setEditing({ ...editing, display_name: e.target.value })} className={field} /></Row>
               <Row label="Email"><input value={editing.email} onChange={(e) => setEditing({ ...editing, email: e.target.value })} className={field} /></Row>
               {!editing.id && <Row label={`Password, at least ${settings.password_min_length} characters`}><input type="password" autoComplete="new-password" value={editing.password} onChange={(e) => setEditing({ ...editing, password: e.target.value })} className={field} /></Row>}
-              <Row label="Role"><Select className="w-full !h-8" value={String(editing.role_id)} onChange={(v) => setEditing({ ...editing, role_id: Number(v) })} options={roles.data.map((r: any) => ({ value: String(r.id), label: r.name }))} /></Row>
-              <Row label="Status"><Select className="w-full !h-8" value={editing.status} onChange={(v) => setEditing({ ...editing, status: v })} options={[{ value: "active", label: "Active" }, { value: "disabled", label: "Disabled" }]} /></Row>
+              <Row label="Role"><Select className="w-full" value={String(editing.role_id)} onChange={(v) => setEditing({ ...editing, role_id: Number(v) })} options={roles.data.map((r: any) => ({ value: String(r.id), label: r.name }))} /></Row>
+              <Row label="Status"><Select className="w-full" value={editing.status} onChange={(v) => setEditing({ ...editing, status: v })} options={[{ value: "active", label: "Active" }, { value: "disabled", label: "Disabled" }]} /></Row>
             </div>
             <PermissionOverrides catalogue={perms.data} rolePerms={role?.permissions ?? []} grants={editing.grants} denies={editing.denies} onChange={(g, d) => setEditing({ ...editing, grants: g, denies: d })} />
-            {problem && <p className="text-crit">{problem}</p>}
+            {problem && <p role="alert" className="text-crit">{problem}</p>}
             <Button variant="primary" type="submit" disabled={save.isPending}>Save</Button>
           </form>
         </SidePanel>
@@ -195,7 +195,7 @@ function Users() {
           <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); reset.mutate(); }}>
             <Row label={`Password, at least ${settings.password_min_length} characters`}><input autoFocus type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} className={field} /></Row>
             <p className="text-ink-3 text-xs">This signs the user out everywhere and clears any lockout.</p>
-            {problem && <p className="text-crit">{problem}</p>}
+            {problem && <p role="alert" className="text-crit">{problem}</p>}
             <Button variant="primary" type="submit">Set password</Button>
           </form>
         </SidePanel>
@@ -227,7 +227,7 @@ function Roles() {
     <div>
       <div className="flex items-center justify-between px-3 py-2">
         <span className="text-ink-3 text-xs">Tick a box to change a role. It takes effect at once. Users can also have individual overrides.</span>
-        <Button variant="primary" onClick={() => { setProblem(""); setEditing({ id: 0, name: "", description: "", permissions: [] }); }}><Plus size={13} />New role</Button>
+        <Button variant="primary" onClick={() => { setProblem(""); setEditing({ id: 0, name: "", description: "", permissions: [] }); }}><Plus size={14} />New role</Button>
       </div>
       {problem && !editing && <p className="text-crit px-3 pb-2">{problem}</p>}
       <div className="overflow-x-auto">
@@ -254,7 +254,7 @@ function Roles() {
               <tr key={g}><td colSpan={roles.data.length + 1} className="!bg-sunken text-xs font-medium text-ink-2">{g}</td></tr>,
               ...perms.data.filter((p: any) => p.group === g).map((p: any) => (
                 <tr key={p.id}>
-                  <td title={p.help}><div>{p.label}</div><div className="text-[11.5px] text-ink-3 whitespace-normal max-w-[340px]">{p.help}</div></td>
+                  <td title={p.help}><div>{p.label}</div><div className="text-xs text-ink-3 whitespace-normal max-w-[340px]">{p.help}</div></td>
                   {roles.data.map((r: any) => (
                     <td key={r.id} className="text-center">
                       <input type="checkbox" aria-label={`${p.label} for ${r.name}`} checked={r.permissions.includes(p.id)} disabled={r.locked} onChange={() => toggle(r, p.id)} />
@@ -273,10 +273,10 @@ function Roles() {
             <Row label="Description"><input value={editing.description} onChange={(e) => setEditing({ ...editing, description: e.target.value })} className={field} /></Row>
             {!editing.id && (
               <Row label="Start from">
-                <Select className="w-full !h-8" value="" onChange={(v) => setEditing({ ...editing, permissions: roles.data.find((r: any) => String(r.id) === v)?.permissions ?? [] })} options={[{ value: "", label: "No permissions" }, ...roles.data.map((r: any) => ({ value: String(r.id), label: `Copy of ${r.name}` }))]} />
+                <Select className="w-full" value="" onChange={(v) => setEditing({ ...editing, permissions: roles.data.find((r: any) => String(r.id) === v)?.permissions ?? [] })} options={[{ value: "", label: "No permissions" }, ...roles.data.map((r: any) => ({ value: String(r.id), label: `Copy of ${r.name}` }))]} />
               </Row>
             )}
-            {problem && <p className="text-crit">{problem}</p>}
+            {problem && <p role="alert" className="text-crit">{problem}</p>}
             <Button variant="primary" type="submit">Save</Button>
           </form>
         </SidePanel>
@@ -304,17 +304,17 @@ function SettingRow({ s, onSaved }: { s: any; onSaved: () => void }) {
           {s.restart && <Badge tone="warn">restart needed</Badge>}
         </div>
         <p id={helpId} className="text-xs text-ink-2">{s.help}</p>
-        <code className="text-[11.5px] text-ink-3 font-mono">{s.env}</code>
+        <code className="text-xs text-ink-3 font-mono">{s.env}</code>
       </div>
       <div>
         {s.kind === "bool" ? (
           <Toggle label={s.label} checked={value === "true"} onChange={(v) => { if (locked) return; setValue(String(v)); save.mutate(String(v)); }}>{value === "true" ? "On" : "Off"}</Toggle>
         ) : s.kind === "choice" ? (
-          <Select label={s.label} className="w-full !h-8" value={value} onChange={(v) => { setValue(v); save.mutate(v); }} options={s.options.map((o: string) => ({ value: o, label: o }))} />
+          <Select label={s.label} className="w-full" value={value} onChange={(v) => { setValue(v); save.mutate(v); }} options={s.options.map((o: string) => ({ value: o, label: o }))} />
         ) : (
           <input aria-label={s.label} aria-describedby={helpId} disabled={locked} type={s.kind === "string" ? "text" : "number"} min={s.min ?? undefined} max={s.max ?? undefined} value={value} onChange={(e) => setValue(e.target.value)} onBlur={() => commit(value)} onKeyDown={(e) => e.key === "Enter" && commit(value)} className={`${field} disabled:opacity-60`} />
         )}
-        <div className="flex items-center gap-2 mt-1 text-[11.5px] text-ink-3">
+        <div className="flex items-center gap-2 mt-1 text-xs text-ink-3">
           {locked ? <span><Lock size={10} className="inline -mt-0.5 mr-0.5" aria-hidden />Set by environment variable</span> : s.source === "database" ? (
             <>
               <span>Saved in database</span>
@@ -344,7 +344,7 @@ function SettingsPanel() {
     <div className="flex flex-col md:flex-row">
       <nav className="md:w-[190px] shrink-0 border-b md:border-b-0 md:border-r border-line p-2 max-md:flex max-md:overflow-x-auto max-md:gap-1">
         {groups.map((g) => (
-          <button type="button" key={g} onClick={() => setGroup(g)} className={`block md:w-full shrink-0 whitespace-nowrap text-left px-2.5 py-1.5 rounded-md ${group === g ? "bg-accent-wash font-medium" : "text-ink-2 hover:bg-sunken"}`}>{g}</button>
+          <button type="button" key={g} onClick={() => setGroup(g)} className={`block md:w-full shrink-0 whitespace-nowrap text-left px-2.5 py-1.5 rounded-md ${group === g ? "bg-accent-wash font-medium" : "text-ink-2 hover:bg-hover"}`}>{g}</button>
         ))}
       </nav>
       <div className="flex-1 min-w-0">
@@ -388,7 +388,7 @@ function Storage() {
     <div>
       <div className="flex items-center justify-between gap-3 px-3 py-2">
         <p className="text-ink-2 text-xs max-w-[720px]">Where captured data lives. The built-in Local file storage works out of the box; add a ClickHouse server when you need more. Selecting a storage creates its tables if needed, and new traffic is written there.</p>
-        <Button variant="primary" onClick={() => { setProblem(""); setEditing({ ...blankStorage }); }}><Plus size={13} />Add storage</Button>
+        <Button variant="primary" onClick={() => { setProblem(""); setEditing({ ...blankStorage }); }}><Plus size={14} />Add storage</Button>
       </div>
       {!data.encryption_key_set && <p className="text-warn text-xs px-3 pb-2">VP_SECRET_KEY isn't set, so storage passwords are kept unencrypted in MariaDB.</p>}
       {problem && !editing && <p className="text-crit px-3 pb-2">{problem}</p>}
@@ -396,7 +396,7 @@ function Storage() {
         {data.storages.map((s: any) => {
           const r = results[s.id];
           return (
-            <div key={s.id} className={`border rounded-md p-3 ${s.active ? "border-accent" : "border-line"}`}>
+            <div key={s.id} className={`border rounded-md p-3 ${s.active ? "border-accent-soft bg-accent-wash" : "border-line"}`}>
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="font-semibold">{s.name}</span>
                 <Badge>{s.type === "local" ? "Local file" : "ClickHouse"}</Badge>
@@ -405,8 +405,8 @@ function Storage() {
                 <div className="flex-1" />
                 <Button onClick={() => test.mutate(s.id)} disabled={test.isPending}>Test connection</Button>
                 {!s.active && <Button variant="primary" onClick={() => activate.mutate(s.id)}>Use this storage</Button>}
-                {!s.built_in && <Button onClick={() => { setProblem(""); setEditing({ ...s, password: "" }); }}><Pencil size={13} />Edit</Button>}
-                {!s.built_in && !s.active && <Button onClick={() => confirm(`Remove ${s.name}?`) && remove.mutate(s.id)}><Trash2 size={13} /></Button>}
+                {!s.built_in && <Button onClick={() => { setProblem(""); setEditing({ ...s, password: "" }); }}><Pencil size={14} />Edit</Button>}
+                {!s.built_in && !s.active && <Button onClick={() => confirm(`Remove ${s.name}?`) && remove.mutate(s.id)}><Trash2 size={14} /></Button>}
               </div>
               {s.type === "local" && <p className="text-xs text-ink-2 mt-1">On this server, database <span className="font-mono">{s.config.database}</span></p>}
               {s.type === "clickhouse" && <p className="text-xs text-ink-2 font-mono mt-1">{s.config.tls ? "https" : "http"}://{s.config.host}:{s.config.port}/{s.config.database} as {s.config.username}{s.encrypted ? " · password encrypted" : ""}</p>}
@@ -425,13 +425,13 @@ function Storage() {
           <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); save.mutate(editing); }}>
             {!editing.id && (
               <fieldset>
-                <legend className="text-xs text-ink-2 mb-1.5">Backend</legend>
+                <legend className="text-xs font-medium text-ink-2 mb-1">Backend</legend>
                 <div className="grid grid-cols-2 gap-2">
                   {BACKENDS.map((b) => (
-                    <label key={b.value} className={`rounded-lg border p-2.5 cursor-pointer ${editing.type === b.value ? "border-accent bg-accent-wash" : "border-line hover:border-line-2"}`}>
+                    <label key={b.value} className={`rounded-md border p-2.5 cursor-pointer has-focus-visible:outline-2 has-focus-visible:outline-accent ${editing.type === b.value ? "border-accent bg-accent-wash" : "border-control hover:bg-hover"}`}>
                       <input type="radio" name="backend" value={b.value} checked={editing.type === b.value} onChange={() => setEditing({ ...editing, type: b.value })} className="sr-only" />
-                      <span className="block font-medium text-[12.5px]">{b.label}</span>
-                      <span className="block text-[11.5px] text-ink-3 mt-0.5 leading-snug">{b.text}</span>
+                      <span className="block font-medium text-[13px]">{b.label}</span>
+                      <span className="block text-xs text-ink-3 mt-0.5 leading-snug">{b.text}</span>
                     </label>
                   ))}
                 </div>
@@ -454,7 +454,7 @@ function Storage() {
             <Toggle checked={editing.config.tls} onChange={(v) => setC({ tls: v })}>Use HTTPS</Toggle>
             </>
             )}
-            {problem && <p className="text-crit">{problem}</p>}
+            {problem && <p role="alert" className="text-crit">{problem}</p>}
             <div><Button variant="primary" type="submit">Save</Button></div>
           </form>
         </SidePanel>
@@ -473,23 +473,23 @@ function Sources({ rows }: { rows: any[] }) {
       client.invalidateQueries({ queryKey: ["sources"] });
     },
   });
-  if (rows.length === 0) return <p className="text-ink-2 p-4">No HEP received yet. Point your SIP servers at port 9060 of this server; each sender appears here by its address.</p>;
+  if (rows.length === 0) return <p className="text-ink-2 p-3">No HEP received yet. Point your SIP servers at port 9060 of this server; each sender appears here by its address.</p>;
   return (
     <div>
-      <p className="text-ink-2 text-xs px-4 pt-3 pb-2 max-w-[720px]">Every server that sends HEP, by address. Give each one an alias, such as Asterisk-1 or OpenSIPS-edge; the source picker at the top shows it. The alias names new traffic, already stored calls keep the name they had.</p>
+      <p className="text-ink-2 text-xs px-3 pt-3 pb-2 max-w-[720px]">Every server that sends HEP, by address. Give each one an alias, such as Asterisk-1 or OpenSIPS-edge; the source picker at the top shows it. The alias names new traffic, already stored calls keep the name they had.</p>
       <div className="overflow-x-auto">
         <table className="data-table">
           <thead><tr><th>Address</th><th>Alias</th><th>Capture ID</th><th>HEP</th><th className="num">Packets</th><th className="num">Clock offset</th><th>Last seen</th><th>Status</th></tr></thead>
           <tbody>{rows.map((r) => (
             <tr key={r.ip}>
               <td className="font-mono text-xs">{r.ip}</td>
-              <td>{can("settings_manage") ? <input aria-label={`Alias for ${r.ip}`} defaultValue={r.alias} placeholder="Add an alias" onBlur={(e) => { const alias = e.target.value.trim(); if (alias !== r.alias) rename.mutate({ ip: r.ip, alias }); }} onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()} className="h-8 w-[200px] rounded-lg bg-raised border border-line-2 px-2" /> : (r.alias || <span className="text-ink-3">–</span>)}</td>
+              <td>{can("settings_manage") ? <input aria-label={`Alias for ${r.ip}`} defaultValue={r.alias} placeholder="Add an alias" onBlur={(e) => { const alias = e.target.value.trim(); if (alias !== r.alias) rename.mutate({ ip: r.ip, alias }); }} onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()} className={`${fieldClass} h-7 w-[200px] px-2`} /> : (r.alias || <span className="text-ink-3">–</span>)}</td>
               <td className="tnum">{r.capture_id}</td>
               <td>v{r.hep_version}</td>
               <td className="num">{r.packets.toLocaleString()}</td>
               <td className="num">{r.offset_ms} ms</td>
               <td>{r.last_seen ? fmtDateTime(r.last_seen, tz).slice(5) : "before restart"}</td>
-              <td><Badge tone={r.status === "active" ? "good" : r.status === "clock skew" ? "warn" : "neutral"}>{r.status}</Badge></td>
+              <td><Status tone={r.status === "active" ? "good" : r.status === "clock skew" ? "warn" : "neutral"}>{r.status}</Status></td>
             </tr>
           ))}</tbody>
         </table>
@@ -505,10 +505,10 @@ function AuditLog() {
   if (!data) return <Loading />;
   const tone = (o: string) => (o === "success" ? "good" : o === "denied" || o === "failure" ? "crit" : "warn") as "good" | "crit" | "warn";
   return (
-    <div className="overflow-auto max-h-[calc(100vh-190px)]">
+    <div className="overflow-auto max-h-[calc(100vh-166px)]">
       <table className="data-table">
         <thead><tr><th>Time</th><th>Actor</th><th>Source</th><th>Action</th><th>Object</th><th>Outcome</th><th>Details</th></tr></thead>
-        <tbody>{data.map((r: any) => <tr key={r.id}><td>{fmtDateTime(r.ts, tz).slice(5)}</td><td>{r.actor}</td><td className="font-mono text-xs">{r.src_ip}</td><td className="font-mono text-xs">{r.action}</td><td className="text-ink-2 font-mono text-xs">{r.object}</td><td><Badge tone={tone(r.outcome)}>{r.outcome}</Badge></td><td className="text-ink-2 text-xs max-w-[320px] truncate" title={r.details}>{r.details}</td></tr>)}</tbody>
+        <tbody>{data.map((r: any) => <tr key={r.id}><td>{fmtDateTime(r.ts, tz).slice(5)}</td><td>{r.actor}</td><td className="font-mono text-xs">{r.src_ip}</td><td className="font-mono text-xs">{r.action}</td><td className="text-ink-2 font-mono text-xs">{r.object}</td><td><Status tone={tone(r.outcome)}>{r.outcome}</Status></td><td className="text-ink-2 text-xs max-w-[320px] truncate" title={r.details}>{r.details}</td></tr>)}</tbody>
       </table>
     </div>
   );
@@ -518,7 +518,7 @@ function System({ data }: { data: any }) {
   const ch = data.clickhouse;
   return (
     <div className="p-3 space-y-3">
-      <div className="grid md:grid-cols-2 gap-x-6">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-2.5">
         <KV label="Version">{data.version}</KV>
         <KV label="MariaDB">{data.mariadb}</KV>
         <KV label="HEP UDP">{data.listeners.hep_udp || "off"}</KV>
@@ -527,10 +527,12 @@ function System({ data }: { data: any }) {
         <KV label="Storage engine">{ch ? `ClickHouse ${ch.version} · ${ch.database}` : "starting"}</KV>
       </div>
       {ch && ch.tables.length > 0 && (
-        <table className="w-full">
-          <thead><tr><th>Table</th><th>Rows</th><th>Size</th><th>Parts</th></tr></thead>
-          <tbody>{ch.tables.map((t: any) => <tr key={t.table}><td className="font-mono text-xs">{t.table}</td><td className="tnum">{Number(t.rows).toLocaleString()}</td><td className="tnum">{(Number(t.bytes) / 1048576).toFixed(1)} MB</td><td className="tnum">{t.parts}</td></tr>)}</tbody>
-        </table>
+        <div className="border border-line rounded-md overflow-x-auto">
+          <table className="data-table">
+            <thead><tr><th>Table</th><th className="num">Rows</th><th className="num">Size</th><th className="num">Parts</th></tr></thead>
+            <tbody>{ch.tables.map((t: any) => <tr key={t.table}><td className="font-mono text-xs">{t.table}</td><td className="num">{Number(t.rows).toLocaleString()}</td><td className="num">{(Number(t.bytes) / 1048576).toFixed(1)} MB</td><td className="num">{t.parts}</td></tr>)}</tbody>
+          </table>
+        </div>
       )}
       <div>
         <h3 className="font-semibold mb-1">Dropped packets since start</h3>
@@ -555,17 +557,17 @@ export function PreferencesPage() {
     <div className="max-w-[620px]">
       <PageHeader title="Preferences" description={`Signed in as ${me.username}, role ${me.role}.`} />
       <Card title="Display">
-        <div className="px-3.5 pb-3.5 space-y-3">
+        <div className="p-3 space-y-3">
           <Toggle checked={crosshair} onChange={(v) => savePrefs({ crosshair: v })}>Link charts on hover: pointing at one chart shows the crosshair on every chart of the dashboard</Toggle>
           <div className="grid grid-cols-3 gap-2">
-            <Row label="Theme"><Select className="w-full !h-8" value={prefs.theme ?? "system"} onChange={(v) => savePrefs({ theme: v as "light" | "dark" | "system" })} options={[{ value: "system", label: "Follow system" }, { value: "light", label: "Light" }, { value: "dark", label: "Dark" }]} /></Row>
-            <Row label="Time zone"><Select className="w-full !h-8" value={tz} onChange={(v) => savePrefs({ tz: v })} options={zones.map((z) => ({ value: z, label: z }))} /></Row>
-            <Row label="Table rows"><Select className="w-full !h-8" value={density} onChange={(v) => savePrefs({ density: v as "compact" | "comfortable" })} options={[{ value: "comfortable", label: "Comfortable" }, { value: "compact", label: "Compact" }]} /></Row>
+            <Row label="Theme"><Select className="w-full" value={prefs.theme ?? "system"} onChange={(v) => savePrefs({ theme: v as "light" | "dark" | "system" })} options={[{ value: "system", label: "Follow system" }, { value: "light", label: "Light" }, { value: "dark", label: "Dark" }]} /></Row>
+            <Row label="Time zone"><Select className="w-full" value={tz} onChange={(v) => savePrefs({ tz: v })} options={zones.map((z) => ({ value: z, label: z }))} /></Row>
+            <Row label="Table rows"><Select className="w-full" value={density} onChange={(v) => savePrefs({ density: v as "compact" | "comfortable" })} options={[{ value: "comfortable", label: "Comfortable" }, { value: "compact", label: "Compact" }]} /></Row>
           </div>
         </div>
       </Card>
       <Card title="Change password" className="mt-3">
-        <form className="px-3.5 pb-3.5 space-y-2" onSubmit={(e) => { e.preventDefault(); change.mutate(); }}>
+        <form className="p-3 space-y-3" onSubmit={(e) => { e.preventDefault(); change.mutate(); }}>
           <Row label="Current password"><input type="password" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} className={field} /></Row>
           <Row label={`New password, at least ${settings.password_min_length} characters`}><input type="password" autoComplete="new-password" value={next} onChange={(e) => setNext(e.target.value)} className={field} /></Row>
           {note && <p className="text-xs text-ink-2">{note}</p>}

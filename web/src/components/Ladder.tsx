@@ -65,13 +65,13 @@ export function Ladder({ columns, messages, selected, onSelect, tz, timeMode, sv
   return (
     <div ref={box} className="ladder">
       <div className="flex sticky top-[-16px] z-10 bg-surface border-b border-line-2">
-        <div style={{ width: TIME_W }} className="shrink-0 px-2 py-1.5 text-ink-3 text-[11.5px] self-end">
+        <div style={{ width: TIME_W }} className="shrink-0 px-2 py-1.5 text-ink-3 text-xs self-end">
           {timeMode === "absolute" ? `Time (${tz})` : "Delta"}
         </div>
         {columns.map((c) => (
           <div key={c.name} style={{ width: colW }} className="text-center py-1.5 px-1 min-w-0">
-            <div className="font-semibold text-[12.5px] truncate">{scrub(c.name)}</div>
-            <div className="text-ink-3 text-[11.5px] font-mono truncate">{c.ip}{c.capture_id ? ` · capture ${c.capture_id}` : ""}</div>
+            <div className="font-semibold text-[13px] truncate">{scrub(c.name)}</div>
+            <div className="text-ink-3 text-xs font-mono truncate">{c.ip}{c.capture_id ? ` · capture ${c.capture_id}` : ""}</div>
           </div>
         ))}
       </div>

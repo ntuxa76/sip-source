@@ -3,7 +3,7 @@ import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { ArrowDown, ArrowUp, Ban, Bookmark, ChevronDown, ChevronRight, CircleAlert, Columns3, Download, SlidersHorizontal, Trash2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { HistogramStrip } from "../components/charts";
-import { Button, Card, Empty, ErrorNote, FindingBadge, Loading, MosCell, RegStatus, Select, StatusChip } from "../components/ui";
+import { Button, CallStateBadge, Card, Empty, ErrorNote, FindingBadge, Loading, MosCell, RegStatus, Select, StatusChip, fieldClass, popoverClass } from "../components/ui";
 import { del, get, post, qs } from "../lib/api";
 import type { Call } from "../lib/api";
 import { rangeParam, usePrefs, useRange, useSource } from "../lib/context";
@@ -49,7 +49,7 @@ const COLUMNS: ColumnDef[] = [
   { id: "caller_n", label: "Caller", sort: true, cell: (c) => mono(c.caller_n) },
   { id: "callee_n", label: "Callee", sort: true, cell: (c) => mono(c.callee_n) },
   { id: "final_status", label: "Status", sort: true, cell: (c) => <StatusChip status={c.final_status} reason={c.final_reason} /> },
-  { id: "state", label: "State", sort: true, cell: (c) => c.state },
+  { id: "state", label: "State", sort: true, cell: (c) => <CallStateBadge state={c.state} /> },
   { id: "direction", label: "Direction", sort: true, cell: (c) => <span className="text-ink-2">{c.direction}</span> },
   { id: "trunk", label: "Trunk", sort: true, cell: (c) => c.trunk || dash },
   { id: "capture_ids", label: "Capture IDs", cell: (c) => mono(c.capture_ids.join(", ")) },
@@ -107,8 +107,8 @@ function TextFilter({ label, q, field, op = ":", placeholder, type = "text", suf
   };
   return (
     <label className="block">
-      <span className="text-xs text-ink-2">{label}</span>
-      <input type={type} value={value} onChange={(e) => setValue(e.target.value)} onBlur={apply} onKeyDown={(e) => e.key === "Enter" && apply()} placeholder={placeholder} spellCheck={false} className="w-full h-7 rounded-md bg-sunken border border-line px-2 font-mono text-xs focus:border-accent" />
+      <span className="block mb-0.5 text-xs text-ink-2">{label}</span>
+      <input type={type} value={value} onChange={(e) => setValue(e.target.value)} onBlur={apply} onKeyDown={(e) => e.key === "Enter" && apply()} placeholder={placeholder} spellCheck={false} className={`${fieldClass} w-full h-7 px-2 font-mono text-xs`} />
     </label>
   );
 }
@@ -117,10 +117,10 @@ function Section({ title, count, children, defaultOpen = true }: { title: string
   const [open, setOpen] = useState(defaultOpen);
   return (
     <section className="border-b border-line last:border-b-0 py-2">
-      <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className="flex items-center gap-1 w-full min-h-6 text-left font-medium text-[12.5px]">
-        {open ? <ChevronDown size={13} aria-hidden /> : <ChevronRight size={13} aria-hidden />}
+      <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className="flex items-center gap-1 w-full min-h-6 text-left font-semibold">
+        {open ? <ChevronDown size={14} aria-hidden /> : <ChevronRight size={14} aria-hidden />}
         <span className="flex-1">{title}</span>
-        {count ? <span className="bg-accent text-white rounded-full px-1.5 text-[11.5px] leading-[16px] tnum">{count}</span> : null}
+        {count ? <span className="bg-accent text-on-accent rounded-xs px-1 text-2xs font-semibold tnum">{count}</span> : null}
       </button>
       {open && <div className="mt-1.5">{children}</div>}
     </section>
@@ -133,14 +133,14 @@ function FilterPanel({ q, data, facets, open, onChange, onFacets }: { q: string;
   const tokens = tokenize(q).map(parseToken).filter(Boolean);
 
   return (
-    <aside id="search-filters" className={`${open ? "" : "max-md:hidden"} w-full md:w-[272px] shrink-0 md:sticky md:top-0 md:self-start max-h-[70vh] md:max-h-[calc(100vh-90px)] flex flex-col bg-surface border border-line rounded-lg`} aria-label="Search filters">
+    <aside id="search-filters" className={`${open ? "" : "max-md:hidden"} w-full md:w-[272px] shrink-0 md:sticky md:top-0 md:self-start max-h-[70vh] md:max-h-[calc(100vh-82px)] flex flex-col bg-surface border border-line rounded-lg`} aria-label="Search filters">
       <header className="flex items-center gap-2 px-3 h-10 border-b border-line shrink-0 relative" ref={ref}>
-        <SlidersHorizontal size={14} className="text-accent" aria-hidden />
+        <SlidersHorizontal size={14} className="text-ink-3" aria-hidden />
         <h2 className="font-semibold flex-1">Filters</h2>
         {tokens.length > 0 && <button type="button" onClick={() => onChange("")} className="h-6 text-xs text-accent hover:underline">Clear all</button>}
         <button type="button" onClick={() => setCustomizing(!customizing)} className="h-6 text-xs text-ink-2 hover:text-ink" aria-expanded={customizing}>Customize</button>
         {customizing && (
-          <div className="absolute z-20 top-full right-2 mt-1 w-[220px] bg-raised border border-line-2 rounded-md shadow-lg p-2.5">
+          <div className={`absolute z-20 top-full right-2 mt-1 w-[220px] p-2.5 font-normal ${popoverClass}`}>
             <p className="text-xs text-ink-3 mb-1.5">Choose which filter lists to show</p>
             {Object.entries(FACET_LABELS).map(([id, label]) => (
               <label key={id} className="flex items-center gap-2 py-0.5">
@@ -186,11 +186,11 @@ function FilterPanel({ q, data, facets, open, onChange, onFacets }: { q: string;
                   const on = hasValue(q, id, i.value, false);
                   const off = hasValue(q, id, i.value, true);
                   return (
-                    <li key={i.value} className="group/row relative flex items-center gap-1.5 min-h-6 py-[3px] pl-1 pr-1 rounded hover:bg-sunken text-xs">
-                      <span className="absolute left-0 top-0 bottom-0 bg-accent/10 rounded" style={{ width: `${(i.count / max) * 100}%` }} aria-hidden />
+                    <li key={i.value} className="group/row relative flex items-center gap-1.5 min-h-6 py-[3px] pl-1 pr-1 rounded-sm hover:bg-hover text-xs">
+                      <span className="absolute left-0 top-0 bottom-0 bg-accent/10 rounded-sm" style={{ width: `${(i.count / max) * 100}%` }} aria-hidden />
                       <input type="checkbox" id={`f-${id}-${i.value}`} checked={on} disabled={i.value === "in progress"} onChange={() => onChange(toggleValue(q, id, i.value))} className="relative" />
                       <label htmlFor={`f-${id}-${i.value}`} className={`relative flex-1 truncate cursor-pointer ${off ? "line-through text-ink-3" : ""}`}>{i.label ?? i.value}</label>
-                      <button type="button" title={off ? "Stop excluding" : "Exclude this value"} aria-label={`Exclude ${i.value}`} onClick={() => onChange(toggleValue(q, id, i.value, true))} className={`relative -my-[3px] w-6 h-6 shrink-0 inline-flex items-center justify-center rounded ${off ? "text-crit" : "text-ink-3 opacity-0 group-hover/row:opacity-100 focus:opacity-100 [@media(hover:none)]:opacity-100"}`}><Ban size={11} /></button>
+                      <button type="button" title={off ? "Stop excluding" : "Exclude this value"} aria-label={`Exclude ${i.value}`} onClick={() => onChange(toggleValue(q, id, i.value, true))} className={`relative -my-[3px] w-6 h-6 shrink-0 inline-flex items-center justify-center rounded-sm ${off ? "text-crit" : "text-ink-3 opacity-0 group-hover/row:opacity-100 focus:opacity-100 [@media(hover:none)]:opacity-100"}`}><Ban size={11} /></button>
                       <span className="relative tnum text-ink-2">{i.count.toLocaleString()}</span>
                     </li>
                   );
@@ -213,7 +213,7 @@ function ActiveFilters({ q, onChange }: { q: string; onChange: (next: string) =>
         const t = parseToken(raw);
         const label = t ? `${FIELD_LABELS[t.field] ?? t.field} ${t.negated ? "is not" : t.op === ":" ? "is" : t.op} ${t.value}` : raw;
         return (
-          <span key={raw} className="inline-flex items-center gap-1 bg-accent-wash rounded pl-2 pr-1 h-6 text-xs">
+          <span key={raw} className="inline-flex items-center gap-1 bg-accent-wash border border-accent-soft rounded-xs pl-2 pr-1 h-6 text-xs">
             {label}
             <button type="button" aria-label={`Remove filter ${label}`} onClick={() => onChange(removeToken(q, raw))} className="text-ink-2 hover:text-ink"><X size={12} /></button>
           </span>
@@ -228,9 +228,9 @@ function ColumnPicker({ columns, onChange }: { columns: string[]; onChange: (c: 
   const ref = useClickAway(() => setOpen(false));
   return (
     <div className="relative" ref={ref}>
-      <Button onClick={() => setOpen(!open)} aria-expanded={open}><Columns3 size={13} />Columns</Button>
+      <Button onClick={() => setOpen(!open)} aria-expanded={open}><Columns3 size={14} />Columns</Button>
       {open && (
-        <div className="absolute z-20 right-0 mt-1 w-[210px] max-h-[360px] overflow-y-auto bg-raised border border-line-2 rounded-md shadow-lg p-2.5">
+        <div className={`absolute z-20 right-0 mt-1 w-[210px] max-h-[360px] overflow-y-auto p-2.5 ${popoverClass}`}>
           {COLUMNS.map((c) => (
             <label key={c.id} className="flex items-center gap-2 py-0.5">
               <input type="checkbox" checked={columns.includes(c.id)} onChange={() => onChange(columns.includes(c.id) ? columns.filter((x) => x !== c.id) : COLUMNS.filter((d) => columns.includes(d.id) || d.id === c.id).map((d) => d.id))} />
@@ -256,18 +256,18 @@ function SavedSearches({ q, onLoad }: { q: string; onLoad: (q: string) => void }
   const remove = useMutation({ mutationFn: (id: number) => del(`/saved-searches/${id}`), onSuccess: refresh });
   return (
     <div className="relative" ref={ref}>
-      <Button onClick={() => setOpen(!open)} aria-expanded={open}><Bookmark size={13} />Saved</Button>
+      <Button onClick={() => setOpen(!open)} aria-expanded={open}><Bookmark size={14} />Saved</Button>
       {open && (
-        <div className="absolute z-20 right-0 mt-1 w-[300px] bg-raised border border-line-2 rounded-md shadow-lg p-2.5">
+        <div className={`absolute z-20 right-0 mt-1 w-[300px] p-2.5 ${popoverClass}`}>
           <form className="flex gap-1.5" onSubmit={(e) => { e.preventDefault(); if (name.trim()) save.mutate(); }}>
-            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name this search" aria-label="Saved search name" className="flex-1 h-7 rounded bg-sunken border border-line px-2 text-xs" />
-            <Button type="submit" variant="primary" disabled={!q || !name.trim()}>Save</Button>
+            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name this search" aria-label="Saved search name" className={`${fieldClass} flex-1 min-w-0 h-7 px-2`} />
+            <Button type="submit" size="sm" variant="primary" disabled={!q || !name.trim()}>Save</Button>
           </form>
           <label className="flex items-center gap-2 mt-1.5 text-xs text-ink-2"><input type="checkbox" checked={shared} onChange={(e) => setShared(e.target.checked)} />Share with everyone</label>
           <ul className="mt-2 border-t border-line pt-1 max-h-[260px] overflow-y-auto">
             {(data ?? []).length === 0 && <li className="text-ink-3 text-xs py-1">Nothing saved yet</li>}
             {(data ?? []).map((s: any) => (
-              <li key={s.id} className="flex items-center gap-1 hover:bg-sunken rounded px-1">
+              <li key={s.id} className="flex items-center gap-1 hover:bg-hover rounded-sm px-1">
                 <button type="button" onClick={() => { onLoad(s.q); setOpen(false); }} className="flex-1 text-left py-1 truncate">
                   {s.name}{s.shared && <span className="text-ink-3 text-xs"> · shared</span>}
                 </button>
@@ -314,7 +314,7 @@ export function SearchPage() {
 
   const problems = data.tokens.filter((t: any) => t.error);
   const detected = data.tokens.filter((t: any) => t.detected);
-  const pad = density === "compact" ? "[&_td]:!py-[3px] [&_th]:!py-1" : "";
+  const pad = density === "compact" ? "dense" : "";
   const csvColumns = columnIds.join(",");
   const lastPage = Math.max(0, Math.ceil(data.total / pageSize) - 1);
   const activeFilters = tokenize(q).length;
@@ -323,7 +323,7 @@ export function SearchPage() {
     <div className={`flex flex-col md:flex-row gap-3 md:items-start ${isFetching ? "opacity-95" : ""}`}>
       <h1 className="sr-only">Search calls</h1>
       <Button className="md:hidden self-start" onClick={() => setShowFilters(!showFilters)} aria-expanded={showFilters} aria-controls="search-filters">
-        <SlidersHorizontal size={13} />
+        <SlidersHorizontal size={14} />
         {activeFilters > 0 ? `Filters (${activeFilters})` : "Filters"}
       </Button>
       <FilterPanel q={q} data={data} facets={facets} open={showFilters} onChange={setQ} onFacets={(f) => savePrefs({ searchFacets: f })} />
@@ -345,7 +345,7 @@ export function SearchPage() {
 
         {data.subscribers.map((s: any) => (
           <Card key={s.number}>
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3.5 py-2.5">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2.5">
               <span className="text-ink-3 text-xs">Subscriber</span>
               <Link to="/subscribers/$number" params={{ number: s.number }} className="font-mono font-medium hover:underline">{s.number}</Link>
               <RegStatus status={s.status} />
@@ -355,7 +355,7 @@ export function SearchPage() {
         ))}
 
         <Card title={<span>{data.total.toLocaleString()} calls</span>} right={<span className="tnum">drag to narrow the range · {tz}</span>}>
-          <div className="px-2 pb-2">
+          <div className="px-2 pt-2 pb-1.5">
             <HistogramStrip histogram={data.histogram} onZoom={(a, b) => setRange(rangeParam(a), rangeParam(Math.min(b, Date.now())))} />
           </div>
         </Card>
@@ -367,8 +367,8 @@ export function SearchPage() {
             <Select label="Row density" value={density} onChange={(v) => savePrefs({ density: v as "compact" | "comfortable" })} options={[{ value: "comfortable", label: "Comfortable" }, { value: "compact", label: "Compact" }]} />
             <Select label="Rows per page" value={String(pageSize)} onChange={(v) => { savePrefs({ searchPageSize: Number(v) }); setPage(0); }} options={[25, 50, 100, 200, 500].filter((n) => n <= settings.search_max_page_size).map((n) => ({ value: String(n), label: `${n} rows` }))} />
             {can("export_bulk") && (
-              <a className="inline-flex items-center gap-1.5 rounded-md px-2.5 h-7 text-[12.5px] font-medium bg-raised border border-line-2 hover:bg-sunken" href={`/api/v1/calls/export.csv${qs({ q, from: from, to, columns: csvColumns, source: source || undefined })}`} download>
-                <Download size={13} />CSV
+              <a className="inline-flex items-center gap-1.5 rounded-md px-3 h-8 font-medium bg-raised border border-line-2 hover:bg-hover" href={`/api/v1/calls/export.csv${qs({ q, from: from, to, columns: csvColumns, source: source || undefined })}`} download>
+                <Download size={14} />CSV
               </a>
             )}
           </div>
@@ -408,11 +408,11 @@ export function SearchPage() {
                   </tbody>
                 </table>
               </div>
-              <div className="flex items-center justify-between px-3.5 py-2">
+              <div className="flex items-center justify-between px-3 py-2 border-t border-line">
                 <span className="text-ink-3 text-xs tnum">{(page * pageSize + 1).toLocaleString()}–{Math.min((page + 1) * pageSize, data.total).toLocaleString()} of {data.total.toLocaleString()}</span>
                 <div className="flex gap-2">
-                  <Button onClick={() => setPage(page - 1)} disabled={page <= 0}>Previous</Button>
-                  <Button onClick={() => setPage(page + 1)} disabled={page >= lastPage}>Next</Button>
+                  <Button size="sm" onClick={() => setPage(page - 1)} disabled={page <= 0}>Previous</Button>
+                  <Button size="sm" onClick={() => setPage(page + 1)} disabled={page >= lastPage}>Next</Button>
                 </div>
               </div>
             </>

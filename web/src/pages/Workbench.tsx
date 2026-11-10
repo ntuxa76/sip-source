@@ -5,7 +5,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { basicSetup, EditorView } from "codemirror";
 import { ChevronRight, Play } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { Button, Card, Empty, ErrorNote, Loading, PageHeader } from "../components/ui";
+import { Button, Card, Empty, ErrorNote, Loading, PageHeader, Tabs } from "../components/ui";
 import { get, post } from "../lib/api";
 import { usePrefs, useRange } from "../lib/context";
 import { fmtDateTime } from "../lib/format";
@@ -57,31 +57,27 @@ export function WorkbenchPage() {
       <PageHeader title="SQL workbench" description="Read-only SQL. Macros {{from}}, {{to}} and {{tz}} follow the time picker." />
       <div className="flex flex-col md:flex-row gap-3 md:items-start">
         <aside className="w-full md:w-[260px] shrink-0 bg-surface border border-line rounded-lg">
-          <div className="flex border-b border-line">
-            {(["library", "schema"] as const).map((s) => (
-              <button type="button" key={s} onClick={() => setSide(s)} className={`flex-1 py-2 capitalize text-[12.5px] ${side === s ? "font-medium border-b-2 border-accent -mb-px" : "text-ink-2"}`}>{s === "library" ? "Query library" : "Views"}</button>
-            ))}
-          </div>
-          <div className="p-2 max-h-[40vh] md:max-h-[calc(100vh-180px)] overflow-y-auto">
+          <Tabs tabs={[{ id: "library", label: "Query library" }, { id: "schema", label: "Views" }]} active={side} onChange={(v) => setSide(v as "library" | "schema")} />
+          <div className="p-2 max-h-[40vh] md:max-h-[calc(100vh-172px)] overflow-y-auto">
             {side === "library" && categories.map((c) => (
               <div key={c} className="mb-2">
-                <h3 className="text-ink-3 text-[11.5px] font-medium px-1.5 mb-0.5">{c}</h3>
+                <h3 className="px-1.5 pt-1.5 pb-0.5 text-2xs font-semibold uppercase tracking-[0.06em] text-ink-3">{c}</h3>
                 {library.data.filter((l: any) => l.category === c).map((l: any) => (
-                  <button type="button" key={l.id} onClick={() => { load(l.sql); run.reset(); }} className="block w-full text-left px-1.5 py-1 rounded hover:bg-sunken text-[12.5px]">{l.title}</button>
+                  <button type="button" key={l.id} onClick={() => { load(l.sql); run.reset(); }} className="block w-full text-left px-1.5 py-1 rounded-sm text-ink-2 hover:bg-hover hover:text-ink">{l.title}</button>
                 ))}
               </div>
             ))}
             {side === "schema" && schema.data.map((v: any) => (
               <div key={v.name}>
-                <button type="button" onClick={() => setOpenView(openView === v.name ? null : v.name)} aria-expanded={openView === v.name} className="flex items-center gap-1 w-full text-left px-1 py-1 rounded hover:bg-sunken">
-                  <ChevronRight size={13} className={openView === v.name ? "rotate-90" : ""} aria-hidden />
+                <button type="button" onClick={() => setOpenView(openView === v.name ? null : v.name)} aria-expanded={openView === v.name} className="flex items-center gap-1 w-full text-left px-1 py-1 rounded-sm hover:bg-hover">
+                  <ChevronRight size={14} className={openView === v.name ? "rotate-90" : ""} aria-hidden />
                   <span className="font-mono text-xs">{v.name}</span>
                 </button>
                 {openView === v.name && (
                   <div className="ml-5 mb-1.5">
                     <p className="text-ink-3 text-xs mb-1">{v.description}</p>
                     {v.columns.map((c: any) => (
-                      <div key={c.name} title={c.description} className="flex justify-between gap-2 text-[11.5px] py-px">
+                      <div key={c.name} title={c.description} className="flex justify-between gap-2 text-xs py-px">
                         <span className="font-mono truncate">{c.name}</span>
                         <span className="text-ink-3 font-mono truncate text-right">{c.type}</span>
                       </div>
@@ -97,7 +93,7 @@ export function WorkbenchPage() {
             <div ref={editorEl} className="h-[220px] overflow-hidden rounded-t-lg" />
             <div className="flex items-center justify-between gap-3 px-3 py-2 border-t border-line">
               <span className="text-ink-3 text-xs">{`Running on ${storage.data?.name || "the selected storage"} as read-only.`}</span>
-              <Button variant="primary" onClick={execute} disabled={run.isPending}><Play size={13} />Run</Button>
+              <Button variant="primary" onClick={execute} disabled={run.isPending}><Play size={14} />Run</Button>
             </div>
           </Card>
           <Card title="Results" right={result && <span className="tnum">{result.rows.length} rows{result.stats.truncated ? " (cut off)" : ""} · {result.stats.rows_read.toLocaleString()} rows read · {result.stats.duration_ms} ms</span>}>

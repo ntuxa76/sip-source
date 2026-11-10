@@ -56,37 +56,44 @@ export function seriesColor(name: string, theme: "light" | "dark"): string {
   return p[KNOWN_SLOTS[name] ?? hashSlot(name)];
 }
 
-function chrome(theme: "light" | "dark") {
+// The canvas cannot read CSS variables, so these repeat the tokens of index.css. Keep the two in step.
+export function chrome(theme: "light" | "dark") {
   return theme === "dark"
-    ? { surface: "#16161a", ink: "#f2f2f5", ink2: "#b9b9c4", muted: "#8f8f9c", grid: "#25252c", axis: "#34343d", raised: "#1d1d22", shadow: "rgba(0,0,0,0.45)" }
-    : { surface: "#ffffff", ink: "#111114", ink2: "#4f4f5a", muted: "#6e6e7a", grid: "#ebebef", axis: "#dadae1", raised: "#ffffff", shadow: "rgba(17,17,20,0.08)" };
+    ? { surface: "#15181c", ink: "#e7eaee", ink2: "#b4bbc5", muted: "#8b939f", grid: "#262b31", axis: "#373e47", raised: "#1b1f24", shadow: "rgba(0,0,0,0.5)" }
+    : { surface: "#ffffff", ink: "#15181c", ink2: "#47505c", muted: "#5f6979", grid: "#e4e7eb", axis: "#cdd3da", raised: "#ffffff", shadow: "rgba(21,24,28,0.12)" };
 }
+
+/** The two directions of a media stream: caller to callee, then callee to caller. */
+export const streamColors = (theme: "light" | "dark") => [PALETTE[theme][SLOT.blue], PALETTE[theme][SLOT.orange]];
+
+/** MOS bands and the sequential ramp of the heatmap, per theme. */
+const QUALITY = {
+  light: { good: "#1a7a45", fair: "#b97c00", poor: "#ad4a17", bad: "#c0282f" },
+  dark: { good: "#4fc27f", fair: "#f0b93f", poor: "#ec835a", bad: "#ef7377" },
+};
+const HEAT = {
+  light: ["#e8f0fa", "#9dc0ea", "#3d7fcb", "#123f7a"],
+  dark: ["#182640", "#285a9c", "#6ea8f5", "#cfe2fb"],
+};
 
 function withAlpha(hex: string, a: number) {
   const n = parseInt(hex.slice(1), 16);
   return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
 }
 
-/** A soft fade from the series colour down to nothing, under a line. */
-function fade(color: string, top: number) {
-  return new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-    { offset: 0, color: withAlpha(color, top) },
-    { offset: 1, color: withAlpha(color, 0) },
-  ]);
-}
-
-function tooltipChrome(c: ReturnType<typeof chrome>) {
+export function tooltipChrome(c: ReturnType<typeof chrome>) {
   return {
     backgroundColor: c.raised,
-    borderColor: c.grid,
+    borderColor: c.axis,
     borderWidth: 1,
-    padding: [9, 11],
-    extraCssText: `border-radius:10px;box-shadow:0 8px 24px ${c.shadow};`,
+    padding: [7, 9],
+    extraCssText: `border-radius:3px;box-shadow:0 4px 12px ${c.shadow};`,
     textStyle: { color: c.ink, fontSize: 12, fontFamily: FONT },
   };
 }
 
-const FONT = "'Inter Variable', system-ui, sans-serif";
+export const FONT = "'IBM Plex Sans Variable', 'IBM Plex Sans', system-ui, sans-serif";
+const MONO = "'IBM Plex Mono', ui-monospace, monospace";
 
 export function useEChart(option: any, group?: string, onReady?: (c: echarts.ECharts) => void) {
   const ref = useRef<HTMLDivElement>(null);
@@ -218,7 +225,7 @@ export function TimeChart({ data, viz, height, group, yMin, yMax, events, legend
     <div>
       <div className="relative" style={{ height }}>
         <div ref={ref} className="absolute inset-0" />
-        <div ref={zoomBox} className="absolute top-0 bottom-5 pointer-events-none bg-accent/15 border-x border-accent hidden" />
+        <div ref={zoomBox} className="absolute top-0 bottom-5 pointer-events-none bg-accent/10 border-x border-accent hidden" />
       </div>
       {multi && (
         <Legend
@@ -247,7 +254,7 @@ function Legend({ data, hidden, onToggle }: { data: TimeSeriesResult; hidden: Se
   const settled = data.partial_from ?? data.buckets.length;
   const unit = data.metric.unit;
   return (
-    <div className="flex flex-wrap gap-x-3 gap-y-0.5 px-1 pt-1 max-h-[42px] overflow-y-auto">
+    <div className="flex flex-wrap gap-x-3.5 gap-y-0.5 px-1 pt-1 max-h-[42px] overflow-y-auto">
       {data.series.map((s) => {
         const last = [...s.values.slice(0, settled)].reverse().find((v) => v !== null && v !== undefined);
         const off = hidden.has(s.name);
@@ -257,9 +264,9 @@ function Legend({ data, hidden, onToggle }: { data: TimeSeriesResult; hidden: Se
             type="button"
             title="Click to toggle, Alt+click to isolate"
             onClick={(e) => onToggle(s.name, e.altKey)}
-            className={`flex items-center gap-1.5 text-[11.5px] ${off ? "opacity-40" : ""}`}
+            className={`flex items-center gap-1.5 text-xs leading-[18px] ${off ? "opacity-45" : ""}`}
           >
-            <span className="inline-block w-2 h-2 rounded-full" style={{ background: seriesColor(s.name, theme) }} />
+            <span className="inline-block w-2 h-2 rounded-xs" style={{ background: seriesColor(s.name, theme) }} />
             <span className="text-ink-2">{s.name}</span>
             <span className="text-ink-3 tnum">{metricText(last, unit)}</span>
           </button>
@@ -288,7 +295,7 @@ function buildTimeOption(data: TimeSeriesResult, viz: Viz, theme: "light" | "dar
         type: "bar",
         stack,
         barMaxWidth: 24,
-        itemStyle: { color, borderColor: c.surface, borderWidth: data.buckets.length > 150 ? 0 : 1, borderRadius: stack ? 0 : [3, 3, 0, 0] },
+        itemStyle: { color, borderColor: c.surface, borderWidth: data.buckets.length > 150 ? 0 : 1, },
         emphasis: { disabled: true },
         data: s.values.map((v, i) =>
           partial !== null && i >= partial
@@ -305,25 +312,25 @@ function buildTimeOption(data: TimeSeriesResult, viz: Viz, theme: "light" | "dar
       return lowSample(i) ? { value: v, symbol: "circle", symbolSize: 4, itemStyle: { color: c.muted } } : v;
     });
     const tail = s.values.map((v, i) => (partial !== null && i >= partial - 1 ? v : null));
-    const base = { name: s.name, type: "line", smooth: 0.3, smoothMonotone: "x", showSymbol: false, symbolSize: 8, connectNulls: false, stack, animation: false, emphasis: { disabled: true } };
-    // A stacked area keeps flat fills so the bands stay readable; a lone line gets a soft fade.
-    const area = viz === "area" ? (stack ? { color, opacity: 0.32 } : { color: fade(color, 0.22) }) : data.series.length === 1 ? { color: fade(color, 0.12) } : undefined;
+    const base = { name: s.name, type: "line", showSymbol: false, symbolSize: 6, connectNulls: false, stack, animation: false, emphasis: { disabled: true } };
+    // Flat fills only: bands in a stacked area, a light wash under a lone line.
+    const area = viz === "area" ? { color, opacity: stack ? 0.3 : 0.14 } : data.series.length === 1 ? { color: withAlpha(color, 0.08) } : undefined;
     series.push({
       ...base,
       data: settled,
-      lineStyle: { width: 2, color, cap: "round", join: "round" },
-      itemStyle: { color, borderColor: c.surface, borderWidth: 2 },
+      lineStyle: { width: 1.5, color, join: "round" },
+      itemStyle: { color, borderColor: c.surface, borderWidth: 1 },
       areaStyle: area,
     });
     if (partial !== null) {
-      series.push({ ...base, stack: stack ? "tail" : undefined, data: tail, lineStyle: { width: 2, color, type: [4, 3] }, itemStyle: { color } });
+      series.push({ ...base, stack: stack ? "tail" : undefined, data: tail, lineStyle: { width: 1.5, color, type: [4, 3] }, itemStyle: { color } });
     }
   }
 
   return {
     animation: false,
     textStyle: { fontFamily: FONT },
-    grid: { left: 46, right: 12, top: 10, bottom: 22 },
+    grid: { left: 46, right: 12, top: 8, bottom: 22 },
     xAxis: {
       type: "category",
       data: categories,
@@ -337,7 +344,7 @@ function buildTimeOption(data: TimeSeriesResult, viz: Viz, theme: "light" | "dar
         formatter: (v: string) => label(Number(v)),
         hideOverlap: true,
       },
-      axisPointer: { type: "line", lineStyle: { color: c.muted, width: 1, type: [4, 4] } },
+      axisPointer: { type: "line", lineStyle: { color: c.muted, width: 1, type: "solid" } },
     },
     yAxis: {
       type: "value",
@@ -347,7 +354,7 @@ function buildTimeOption(data: TimeSeriesResult, viz: Viz, theme: "light" | "dar
       splitNumber: 3,
       axisLine: { show: false },
       axisTick: { show: false },
-      splitLine: { lineStyle: { color: c.grid, width: 1, type: [3, 3] } },
+      splitLine: { lineStyle: { color: c.grid, width: 1 } },
       axisLabel: { color: c.muted, fontSize: 11, formatter: (v: number) => axisValue(v, unit) },
     },
     tooltip: {
@@ -389,14 +396,14 @@ function tooltipHtml(params: any[], data: TimeSeriesResult, theme: "light" | "da
         .map((r) => {
           const low = data.metric.min_samples > 0 && r.n < data.metric.min_samples;
           const sample = ["ratio", "latency", "quality"].includes(data.metric.kind) && data.metric.family !== "synth" ? `<span style="color:${c.muted}"> n=${r.n}${low ? " · low sample" : ""}</span>` : "";
-          return `<div style="display:flex;justify-content:space-between;gap:18px"><span><i style="display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:7px;background:${seriesColor(r.name, theme)}"></i>${single ? escapeHtml(data.metric.name) : escapeHtml(r.name)}</span><span style="font-variant-numeric:tabular-nums"><b style="font-weight:600">${metricText(r.v, data.metric.unit)}</b>${sample}</span></div>`;
+          return `<div style="display:flex;justify-content:space-between;gap:18px"><span><i style="display:inline-block;width:8px;height:8px;border-radius:1px;margin-right:7px;background:${seriesColor(r.name, theme)}"></i>${single ? escapeHtml(data.metric.name) : escapeHtml(r.name)}</span><span style="font-variant-numeric:tabular-nums"><b style="font-weight:600">${metricText(r.v, data.metric.unit)}</b>${sample}</span></div>`;
         })
         .join("")
     : `<div style="color:${c.muted}">No samples in this bucket</div>`;
-  return `<div style="color:${c.ink2};font-size:11.5px;font-weight:500;margin-bottom:6px">${fmtMonthDay(start, tz)} ${fmt(start, tz)} – ${fmt(end, tz)}${partial ? " · still settling" : ""}</div>${body}`;
+  return `<div style="color:${c.ink2};font-size:11px;font-weight:500;margin-bottom:5px">${fmtMonthDay(start, tz)} ${fmt(start, tz)} – ${fmt(end, tz)}${partial ? " · still settling" : ""}</div>${body}`;
 }
 
-/** The small bar strip under a stat: hatched history, with the latest settled bucket in colour. */
+/** The small bar strip under a stat: grey history, with the latest settled bucket in the accent colour. */
 export function MiniBars({ values, unit, count = 12, height = 30 }: { values: (number | null)[]; unit: string; count?: number; height?: number }) {
   const size = Math.max(1, Math.ceil(values.length / count));
   const bars: (number | null)[] = [];
@@ -407,11 +414,11 @@ export function MiniBars({ values, unit, count = 12, height = 30 }: { values: (n
   const max = Math.max(0, ...bars.map((v) => v ?? 0));
   if (bars.length === 0) return <div style={{ height }} />;
   return (
-    <div className="flex items-end gap-1" style={{ height }} aria-hidden>
+    <div className="flex items-end gap-[3px]" style={{ height }} aria-hidden>
       {bars.map((v, i) => {
         const pct = v === null || max === 0 ? 0 : (v / max) * 100;
         const last = i === bars.length - 1;
-        return <div key={i} title={metricText(v, unit)} className={`flex-1 rounded-[4px] ${last ? "bar-hatch-accent" : "bar-hatch"}`} style={{ height: `${Math.max(pct, 8)}%` }} />;
+        return <div key={i} title={metricText(v, unit)} className={`flex-1 ${last ? "bg-accent" : "bg-line-2"}`} style={{ height: `${Math.max(pct, 6)}%` }} />;
       })}
     </div>
   );
@@ -420,15 +427,15 @@ export function MiniBars({ values, unit, count = 12, height = 30 }: { values: (n
 export function BarList({ rows, unit, color, onClick }: { rows: { key: string; value: number; samples?: number }[]; unit: string; color?: string; onClick?: (key: string) => void }) {
   const max = Math.max(...rows.map((r) => r.value), 1e-9);
   return (
-    <div className="px-3.5 pb-2.5 space-y-1">
+    <div className="px-3 pb-3 space-y-1.5">
       {rows.map((r) => (
         <button key={r.key} type="button" disabled={!onClick} onClick={() => onClick?.(r.key)} className="w-full text-left group block disabled:cursor-default">
           <div className="flex justify-between gap-2 text-xs">
             <span className="truncate text-ink-2 group-hover:text-ink">{r.key}</span>
             <span className="tnum text-ink font-medium">{metricText(r.value, unit)}</span>
           </div>
-          <div className="h-1.5 mt-1 rounded-full bg-sunken">
-            <div className="h-1.5 rounded-full" style={{ width: `${Math.max((r.value / max) * 100, 1.5)}%`, background: color ?? "var(--accent)" }} />
+          <div className="h-1 mt-1 bg-sunken">
+            <div className="h-1" style={{ width: `${Math.max((r.value / max) * 100, 1.5)}%`, background: color ?? "var(--accent)" }} />
           </div>
         </button>
       ))}
@@ -452,8 +459,8 @@ export function HeatChart({ data, height, onClick }: { data: any; height: number
       textStyle: { fontFamily: FONT },
       grid: { left: 46, right: 10, top: 6, bottom: 20 },
       xAxis: { type: "category", data: data.buckets.map(String), axisTick: { show: false }, axisLine: { lineStyle: { color: c.axis } }, splitArea: { show: false }, axisLabel: { color: c.muted, fontSize: 11, interval: (i: number) => isTick(data.buckets[i]), formatter: (v: string) => label(Number(v)), hideOverlap: true } },
-      yAxis: { type: "category", data: data.keys, axisTick: { show: false }, axisLine: { show: false }, axisLabel: { color: c.ink2, fontSize: 11, fontFamily: "'JetBrains Mono Variable', monospace" } },
-      visualMap: { show: false, min: 0, max, inRange: { color: theme === "dark" ? ["#1a2c44", "#256abf", "#86b6ef", "#cde2fb"] : ["#e6f0fc", "#86b6ef", "#256abf", "#0d366b"] } },
+      yAxis: { type: "category", data: data.keys, axisTick: { show: false }, axisLine: { show: false }, axisLabel: { color: c.ink2, fontSize: 11, fontFamily: MONO } },
+      visualMap: { show: false, min: 0, max, inRange: { color: HEAT[theme] } },
       tooltip: {
         confine: true,
         ...tooltipChrome(c),
@@ -484,7 +491,7 @@ export function Histogram({ bins, unit, height }: { bins: { from: number; to: nu
       xAxis: { type: "category", data: bins.map((b) => b.from.toFixed(unit === "mos" ? 2 : 0)), axisTick: { show: false }, axisLine: { lineStyle: { color: c.axis } }, axisLabel: { color: c.muted, fontSize: 11, hideOverlap: true, interval: 3 } },
       yAxis: { type: "value", splitNumber: 3, axisLine: { show: false }, axisTick: { show: false }, splitLine: { lineStyle: { color: c.grid } }, axisLabel: { color: c.muted, fontSize: 11, formatter: compact } },
       tooltip: { trigger: "axis", ...tooltipChrome(c), formatter: (p: any[]) => { const b = bins[p[0].dataIndex]; return `MOS ${b.from.toFixed(2)}–${b.to.toFixed(2)}: <b>${b.count.toLocaleString()}</b> calls`; } },
-      series: [{ type: "bar", barMaxWidth: 24, itemStyle: { borderRadius: [4, 4, 0, 0] }, data: bins.map((b) => ({ value: b.count, itemStyle: { color: mosBarColor(b.from, unit, theme) } })) }],
+      series: [{ type: "bar", barMaxWidth: 24, data: bins.map((b) => ({ value: b.count, itemStyle: { color: mosBarColor(b.from, unit, theme) } })) }],
     }),
     [bins, unit, theme, c.axis, c.muted, c.grid, c.raised, c.ink],
   );
@@ -494,10 +501,11 @@ export function Histogram({ bins, unit, height }: { bins: { from: number; to: nu
 
 function mosBarColor(from: number, unit: string, theme: "light" | "dark") {
   if (unit !== "mos") return PALETTE[theme][0];
-  if (from >= 4.0) return "#0ca30c";
-  if (from >= 3.6) return "#fab219";
-  if (from >= 3.1) return "#ec835a";
-  return "#d03b3b";
+  const q = QUALITY[theme];
+  if (from >= 4.0) return q.good;
+  if (from >= 3.6) return q.fair;
+  if (from >= 3.1) return q.poor;
+  return q.bad;
 }
 
 export function HistogramStrip({ histogram, height = 70, onZoom }: { histogram: any; height?: number; onZoom?: (from: number, to: number) => void }) {
@@ -556,7 +564,7 @@ export function HistogramStrip({ histogram, height = 70, onZoom }: { histogram: 
   return (
     <div className="relative" style={{ height }}>
       <div ref={ref} className="absolute inset-0" />
-      <div ref={box} className="absolute top-0 bottom-4 pointer-events-none bg-accent/15 border-x border-accent hidden" />
+      <div ref={box} className="absolute top-0 bottom-4 pointer-events-none bg-accent/10 border-x border-accent hidden" />
     </div>
   );
 }

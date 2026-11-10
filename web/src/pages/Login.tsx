@@ -1,18 +1,11 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Activity, Search, Workflow } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
-import { Button } from "../components/ui";
+import { Button, fieldClass } from "../components/ui";
 import { post } from "../lib/api";
 import { applyTheme, resolveTheme } from "../lib/context";
 
-const field = "w-full h-10 rounded-lg bg-raised border border-line-2 px-3 focus:border-accent";
-
-const POINTS = [
-  { icon: Workflow, title: "Every call, every leg", text: "SIP ladders with both legs joined, findings and RTCP quality." },
-  { icon: Activity, title: "Live health", text: "ASR, PDD, concurrency and failures per source and trunk." },
-  { icon: Search, title: "Find anything", text: "Search by number, Call-ID or IP across all captured traffic." },
-];
+const field = `${fieldClass} w-full h-9 px-2.5`;
 
 function Frame({ settings, title, subtitle, children }: { settings: any; title: string; subtitle?: string; children: React.ReactNode }) {
   useEffect(() => {
@@ -20,50 +13,27 @@ function Frame({ settings, title, subtitle, children }: { settings: any; title: 
     document.title = settings.app_name;
   }, [settings]);
   return (
-    <div className="min-h-full grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] bg-page">
-      <aside className="hidden lg:flex flex-col justify-between p-12 text-white bg-[linear-gradient(150deg,#002171_0%,#0b4fb8_55%,#0178f5_100%)]">
-        <div className="flex items-center gap-3">
-          <span className="w-11 h-11 rounded-xl bg-white flex items-center justify-center shadow-sm">
-            <img src="/logo.png" alt="" width={34} height={34} />
-          </span>
-          <span className="text-xl font-semibold tracking-tight">{settings.app_name}</span>
+    <main className="min-h-full flex flex-col items-center justify-center px-4 py-10 bg-page">
+      <div className="w-full max-w-[380px]">
+        <div className="flex items-center justify-center gap-2.5 mb-6">
+          <img src="/logo.png" alt="" width={32} height={32} />
+          <span className="text-md font-semibold">{settings.app_name}</span>
         </div>
-        <div className="max-w-[440px]">
-          <h2 className="text-[30px] leading-tight font-semibold tracking-tight">SIP capture and troubleshooting for your voice network.</h2>
-          <ul className="mt-8 space-y-5">
-            {POINTS.map((p) => (
-              <li key={p.title} className="flex gap-3.5">
-                <span className="w-9 h-9 rounded-lg bg-white/12 border border-white/15 flex items-center justify-center shrink-0"><p.icon size={17} aria-hidden /></span>
-                <span>
-                  <span className="block font-medium">{p.title}</span>
-                  <span className="block text-white/75 text-[13px] mt-0.5">{p.text}</span>
-                </span>
-              </li>
-            ))}
-          </ul>
+        <div className="bg-surface border border-line rounded-lg p-6">
+          <h1 className="text-xl font-semibold">{title}</h1>
+          {subtitle && <p className="text-ink-2 mt-1">{subtitle}</p>}
+          <div className="mt-5">{children}</div>
         </div>
-        <p className="text-white/55 text-xs">HEP v2 and v3 · Asterisk, OpenSIPS, Kamailio, FreeSWITCH</p>
-      </aside>
-      <main className="flex items-center justify-center p-6">
-        <div className="w-full max-w-[380px]">
-          <div className="flex items-center gap-2.5 mb-8 lg:hidden">
-            <img src="/logo.png" alt="" width={36} height={36} />
-            <span className="text-lg font-semibold tracking-tight">{settings.app_name}</span>
-          </div>
-          <h1 className="text-[24px] font-semibold tracking-tight">{title}</h1>
-          {subtitle && <p className="text-ink-2 mt-1.5">{subtitle}</p>}
-          <div className="mt-6">{children}</div>
-          {settings.login_message && <p className="text-ink-3 text-xs mt-6 whitespace-pre-wrap">{settings.login_message}</p>}
-        </div>
-      </main>
-    </div>
+        {settings.login_message && <p className="text-ink-3 text-xs mt-4 text-center whitespace-pre-wrap">{settings.login_message}</p>}
+      </div>
+    </main>
   );
 }
 
 function Label({ text, children }: { text: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <span className="block text-[12.5px] font-medium text-ink-2 mb-1.5">{text}</span>
+      <span className="block text-xs font-medium text-ink-2 mb-1">{text}</span>
       {children}
     </label>
   );
@@ -82,7 +52,7 @@ export function LoginPage({ settings }: { settings: any }) {
     login.mutate();
   };
   return (
-    <Frame settings={settings} title="Welcome back" subtitle="Sign in to continue.">
+    <Frame settings={settings} title="Sign in">
       <form onSubmit={submit} className="space-y-4">
         <Label text="Username">
           <input autoFocus autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} className={field} />
@@ -90,8 +60,8 @@ export function LoginPage({ settings }: { settings: any }) {
         <Label text="Password">
           <input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} className={field} />
         </Label>
-        {login.isError && <p className="text-crit text-[12.5px]">{(login.error as Error).message}</p>}
-        <Button variant="primary" type="submit" disabled={login.isPending} className="w-full !h-10 justify-center text-[13px]">Sign in</Button>
+        {login.isError && <p role="alert" className="text-crit">{(login.error as Error).message}</p>}
+        <Button variant="primary" type="submit" disabled={login.isPending} className="w-full h-9">Sign in</Button>
       </form>
     </Frame>
   );
@@ -118,7 +88,7 @@ export function SetupPage({ settings, tokenRequired }: { settings: any; tokenReq
     setup.mutate();
   };
   return (
-    <Frame settings={settings} title={`Welcome to ${settings.app_name}`} subtitle="Create the administrator account to finish setting up. Captured calls are stored on this server right away, and you can add a ClickHouse server later.">
+    <Frame settings={settings} title="Set up the administrator" subtitle="Create the administrator account to finish setting up. Captured calls are stored on this server right away, and you can add a ClickHouse server later.">
       <form onSubmit={submit} className="space-y-4">
         <Label text="Administrator username">
           <input autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} className={field} />
@@ -134,8 +104,8 @@ export function SetupPage({ settings, tokenRequired }: { settings: any; tokenReq
             <input value={token} onChange={(e) => setToken(e.target.value)} className={field} />
           </Label>
         )}
-        {problem && <p className="text-crit text-[12.5px]">{problem}</p>}
-        <Button variant="primary" type="submit" disabled={setup.isPending} className="w-full !h-10 justify-center text-[13px]">Create account and continue</Button>
+        {problem && <p role="alert" className="text-crit">{problem}</p>}
+        <Button variant="primary" type="submit" disabled={setup.isPending} className="w-full h-9">Create account and continue</Button>
       </form>
     </Frame>
   );

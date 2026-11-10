@@ -1,6 +1,6 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { ArrowDownRight, ArrowUpRight, Code2, Copy, Download, Info, Loader2, Pencil, Table2, Trash2, X } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, Code2, Copy, Download, Info, Loader2, Pencil, Table2, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { ApiError, get, post, qs } from "../lib/api";
 import type { Call, MetricQuery, TimeSeriesResult } from "../lib/api";
@@ -8,7 +8,7 @@ import { rangeParam, usePrefs, useRange, useSource } from "../lib/context";
 import type { PanelDef } from "../lib/dashboard";
 import { downloadBlob, fmtDateTime, fmtDuration, fmtHMS, formatMetric, metricText } from "../lib/format";
 import { BarList, HeatChart, Histogram, MiniBars, TimeChart } from "./charts";
-import { Card, Empty, FindingBadge, Loading, MosCell, RegStatus, StatusChip } from "./ui";
+import { Card, Dialog, Empty, FindingBadge, Loading, MosCell, RegStatus, StatusChip } from "./ui";
 
 export interface PanelContext {
   /** Set when the panel is saved on a dashboard, so a viewer can run its SQL without permission to write SQL. */
@@ -136,7 +136,7 @@ export function PanelView({ panel, ctx, height }: { panel: PanelDef; ctx: PanelC
 
 function IconBtn({ label, onClick, active, children }: { label: string; onClick: () => void; active?: boolean; children: React.ReactNode }) {
   return (
-    <button type="button" aria-label={label} title={label} onClick={onClick} onMouseDown={(e) => e.stopPropagation()} className={`panel-action p-1 rounded hover:bg-sunken ${active ? "text-accent" : "text-ink-3"}`}>
+    <button type="button" aria-label={label} title={label} onClick={onClick} onMouseDown={(e) => e.stopPropagation()} className={`panel-action inline-grid place-items-center w-6 h-6 rounded-sm hover:bg-hover hover:text-ink ${active ? "text-accent" : "text-ink-3"}`}>
       {children}
     </button>
   );
@@ -158,7 +158,7 @@ function PanelNote({ error }: { error: unknown }) {
   const e = error as ApiError | Error;
   const starting = e instanceof ApiError && e.status === 503 && /starting|few seconds/i.test(e.message);
   return (
-    <div className="flex items-start gap-1.5 text-ink-3 text-xs px-4 py-3">
+    <div className="flex items-start gap-1.5 text-ink-3 text-xs px-3 py-2.5">
       {starting ? <Loader2 size={13} className="animate-spin shrink-0 mt-px" aria-hidden /> : <Info size={13} className="shrink-0 mt-px" aria-hidden />}
       <span className="line-clamp-3">{starting ? "Storage is starting. Data appears in a few seconds." : e.message}</span>
     </div>
@@ -167,9 +167,9 @@ function PanelNote({ error }: { error: unknown }) {
 
 function PanelFrame({ panel, ctx, height, info, actions, children }: { panel: PanelDef; ctx: PanelContext; height: number; info?: string; actions?: React.ReactNode; children: React.ReactNode }) {
   return (
-    <section className={`group/panel bg-surface border rounded-xl shadow-card flex flex-col overflow-hidden ${ctx.onEdit ? "border-line-2" : "border-line"}`} style={{ height }} title={panel.options.description}>
-      <header className={`flex items-center justify-between gap-3 px-4 pt-3 pb-1 shrink-0 ${ctx.onEdit ? "panel-drag cursor-move" : ""}`}>
-        <h2 className="font-semibold text-[14px] tracking-tight truncate">{panel.title}</h2>
+    <section className={`group/panel bg-surface border rounded-lg flex flex-col overflow-hidden ${ctx.onEdit ? "border-line-2" : "border-line"}`} style={{ height }} title={panel.options.description}>
+      <header className={`flex items-center justify-between gap-3 h-9 px-3 shrink-0 ${ctx.onEdit ? "panel-drag cursor-move" : ""}`}>
+        <h2 className="font-semibold truncate">{panel.title}</h2>
         <div className="flex items-center gap-1 text-ink-3 text-xs shrink-0">
           <span className={`items-center gap-0.5 ${ctx.onEdit ? "flex" : "hidden group-hover/panel:flex group-focus-within/panel:flex"}`}>
             {actions}
@@ -195,13 +195,13 @@ function StatPanel({ panel, ctx, height }: { panel: PanelDef; ctx: PanelContext;
   const good = delta === null || !d || d.metric.better === "none" || Math.abs(delta) < 0.5 ? null : delta > 0 === (d.metric.better === "higher");
   const spark = d?.series.length ? d.buckets.map((_, i) => d.series[0].values[i]).slice(0, d.partial_from ?? undefined) : [];
   const DeltaIcon = delta !== null && delta < 0 ? ArrowDownRight : ArrowUpRight;
-  const deltaTone = good === null ? "bg-ink-3" : good ? "bg-good" : "bg-crit";
+  const deltaTone = good === null ? "text-ink-3" : good ? "text-good" : "text-crit";
   // Tall cards put the bar strip under the number, as wide as the card.
   const tall = height >= 110;
   return (
-    <section className={`group/panel relative bg-surface border rounded-xl shadow-card px-4 pt-3 pb-3 overflow-hidden flex flex-col ${ctx.onEdit ? "border-line-2" : "border-line"}`} style={{ height }} title={panel.options.description ?? d?.metric.description}>
+    <section className={`group/panel relative bg-surface border rounded-lg px-3 pt-2.5 pb-3 overflow-hidden flex flex-col ${ctx.onEdit ? "border-line-2" : "border-line"}`} style={{ height }} title={panel.options.description ?? d?.metric.description}>
       <div className={`flex items-center justify-between gap-2 ${ctx.onEdit ? "panel-drag cursor-move" : ""}`}>
-        <div className="text-[13px] font-medium text-ink-2 truncate">{panel.title}</div>
+        <div className="text-xs font-medium text-ink-2 truncate">{panel.title}</div>
         <span className={`items-center gap-0.5 -my-1 ${ctx.onEdit ? "flex" : "hidden"}`}><EditActions ctx={ctx} /></span>
       </div>
       {error ? (
@@ -209,15 +209,15 @@ function StatPanel({ panel, ctx, height }: { panel: PanelDef; ctx: PanelContext;
       ) : (
         <div className={tall ? "flex flex-col flex-1 min-h-0" : "flex items-end gap-3 flex-1 min-h-0"}>
           <div className={`min-w-0 ${tall ? "flex items-baseline gap-2.5 flex-wrap" : "flex-1"}`}>
-            <div className="text-[26px] font-semibold tracking-tight leading-8 whitespace-nowrap mt-0.5">
+            <div className="text-2xl font-semibold tnum whitespace-nowrap mt-0.5">
               {f?.value ?? "…"}
-              {f?.unit && <span className="text-sm font-medium text-ink-3 ml-1">{f.unit}</span>}
+              {f?.unit && <span className="text-sm font-normal text-ink-3 ml-1">{f.unit}</span>}
             </div>
-            <div className="flex items-center gap-1 text-[11.5px] tnum whitespace-nowrap min-w-0 h-4">
+            <div className="flex items-center gap-1 text-xs tnum whitespace-nowrap min-w-0 h-4">
               {delta !== null && (
                 <>
-                  <span className={`w-3.5 h-3.5 rounded-full flex items-center justify-center text-white shrink-0 ${deltaTone}`}><DeltaIcon size={10} strokeWidth={3} aria-hidden /></span>
-                  <span className="font-semibold text-ink">{Math.abs(delta).toFixed(1)}%</span>
+                  <DeltaIcon size={14} aria-hidden className={`shrink-0 -mr-0.5 ${deltaTone}`} />
+                  <span className="font-medium text-ink">{Math.abs(delta).toFixed(1)}%</span>
                   <span className="text-ink-3 truncate">vs previous</span>
                 </>
               )}
@@ -301,16 +301,10 @@ function TimePanel({ panel, ctx, height }: { panel: PanelDef; ctx: PanelContext;
 
 function SqlDialog({ sql, source, onClose }: { sql: string; source: string; onClose: () => void }) {
   return (
-    <div className="fixed inset-0 z-40 bg-black/40 flex items-center justify-center p-6" onClick={onClose}>
-      <div className="bg-raised border border-line-2 rounded-lg w-[680px] max-w-full p-4" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-2">
-          <h3 className="font-semibold">Query</h3>
-          <button type="button" onClick={onClose} aria-label="Close"><X size={16} /></button>
-        </div>
-        <pre className="font-mono text-xs bg-sunken rounded p-3 overflow-x-auto whitespace-pre-wrap">{sql || "This panel has no SQL form."}</pre>
-        <p className="text-ink-3 text-xs mt-2">Source: {source}. To change it, edit the dashboard and switch the panel to SQL.</p>
-      </div>
-    </div>
+    <Dialog title="Query" onClose={onClose} width={680}>
+      <pre className="font-mono text-xs bg-sunken border border-line rounded-md p-3 overflow-x-auto whitespace-pre-wrap">{sql || "This panel has no SQL form."}</pre>
+      <p className="text-ink-3 text-xs mt-2">Source: {source}. To change it, edit the dashboard and switch the panel to SQL.</p>
+    </Dialog>
   );
 }
 
@@ -367,7 +361,7 @@ function TablePanel({ panel, ctx, height }: { panel: PanelDef; ctx: PanelContext
   const { data, error } = useMetric(buildQuery(panel, from, to, tz, ctx));
   return (
     <PanelFrame panel={panel} ctx={ctx} height={height}>
-      <div className="overflow-auto h-full">
+      <div className="h-full overflow-auto border-t border-line">
         {error ? <PanelNote error={error} /> : !data ? <Loading /> : (
           <table className="data-table">
             <thead>
@@ -437,7 +431,7 @@ function CallsPanel({ panel, ctx, height }: { panel: PanelDef; ctx: PanelContext
   });
   return (
     <PanelFrame panel={panel} ctx={ctx} height={height} info={data ? `${data.total.toLocaleString()} calls` : undefined}>
-      <div className="h-full overflow-auto">
+      <div className="h-full overflow-auto border-t border-line">
         {!can("search_all") ? <Empty>Your account can't browse calls.</Empty> : error ? <PanelNote error={error} /> : !data ? <Loading /> : data.rows.length === 0 ? <Empty>No calls in range</Empty> : (
           <table className="data-table text-xs">
             <thead>
@@ -469,7 +463,7 @@ function FailingAorsPanel({ panel, ctx, height }: { panel: PanelDef; ctx: PanelC
   const { data, error } = useQuery({ queryKey: ["failing"], queryFn: () => get("/registrations/failing"), refetchInterval: refreshMs, placeholderData: keepPreviousData });
   return (
     <PanelFrame panel={panel} ctx={ctx} height={height}>
-      <div className="h-full overflow-auto">
+      <div className="h-full overflow-auto border-t border-line">
         {error ? <PanelNote error={error} /> : !data ? <Loading /> : (
           <table className="data-table text-xs">
             <thead><tr><th>Number</th><th>State</th><th>Last failure</th><th className="num">Failures</th><th>Handset</th></tr></thead>
