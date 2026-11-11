@@ -16,6 +16,8 @@
   --surface: #ffffff;
   --raised: #ffffff;
   --sunken: #f1f3f6;
+  --sidebar: #eef1f5;
+  --sidebar-active: #ffffff;
   --ink: #15181c;
   --ink-2: #47505c;
   --ink-3: #5f6979;
@@ -49,6 +51,8 @@
   --surface: #15181c;
   --raised: #1b1f24;
   --sunken: #1a1d22;
+  --sidebar: #111418;
+  --sidebar-active: #1d2228;
   --ink: #e7eaee;
   --ink-2: #b4bbc5;
   --ink-3: #8b939f;
@@ -98,6 +102,8 @@
   --color-surface: var(--surface);
   --color-raised: var(--raised);
   --color-sunken: var(--sunken);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-active: var(--sidebar-active);
   --color-ink: var(--ink);
   --color-ink-2: var(--ink-2);
   --color-ink-3: var(--ink-3);
@@ -152,13 +158,28 @@ body {
   scrollbar-color: var(--line-2) transparent;
 }
 
+/* Everything that can be clicked shows the hand. */
 button,
+a[href],
+select,
+summary,
+label:has(input[type="checkbox"], input[type="radio"]),
+input[type="checkbox"],
+input[type="radio"],
+input[type="file"],
+input[type="range"],
 [role="button"],
-summary {
+[role="tab"],
+[role="option"],
+[role="menuitem"],
+[role="switch"] {
   cursor: pointer;
 }
 
-button:disabled {
+button:disabled,
+select:disabled,
+input:disabled,
+label:has(input:disabled) {
   cursor: not-allowed;
 }
 
@@ -195,6 +216,8 @@ input[type="radio"] {
   /* Keeps a focused row or field clear of the sticky table headings. */
   #main-scroll {
     scroll-padding-top: 44px;
+    /* The width stays the same when the scrollbar appears, so dashboards don't lay out twice. */
+    scrollbar-gutter: stable;
   }
 }
 

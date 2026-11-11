@@ -1,0 +1,147 @@
+{
+  "schemaVersion": 1,
+  "uid": "security",
+  "title": "Errors & security",
+  "description": "Error spikes, authentication failures, scanners and high-risk destinations",
+  "tags": [
+    "built-in"
+  ],
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "refresh": "30s",
+  "sharedCrosshair": null,
+  "variables": [
+    {
+      "name": "capture_id",
+      "label": "Capture ID",
+      "type": "field",
+      "field": "capture",
+      "multi": true
+    }
+  ],
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Scanner requests",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 8,
+        "h": 4
+      },
+      "query": {
+        "mode": "metric",
+        "metric": "scanner"
+      },
+      "options": {}
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Auth failures",
+      "gridPos": {
+        "x": 8,
+        "y": 0,
+        "w": 8,
+        "h": 4
+      },
+      "query": {
+        "mode": "metric",
+        "metric": "auth_fail"
+      },
+      "options": {}
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Failures",
+      "gridPos": {
+        "x": 16,
+        "y": 0,
+        "w": 8,
+        "h": 4
+      },
+      "query": {
+        "mode": "metric",
+        "metric": "failures"
+      },
+      "options": {}
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Scanner requests by country",
+      "gridPos": {
+        "x": 0,
+        "y": 4,
+        "w": 12,
+        "h": 9
+      },
+      "query": {
+        "mode": "metric",
+        "metric": "scanner",
+        "groupBy": "country"
+      },
+      "options": {
+        "viz": "stacked"
+      }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "4xx/5xx/6xx by status code",
+      "gridPos": {
+        "x": 12,
+        "y": 4,
+        "w": 12,
+        "h": 9
+      },
+      "query": {
+        "mode": "metric",
+        "metric": "failures",
+        "groupBy": "status"
+      },
+      "options": {
+        "viz": "stacked"
+      }
+    },
+    {
+      "id": 6,
+      "type": "top",
+      "title": "Auth failures by source IP",
+      "gridPos": {
+        "x": 0,
+        "y": 13,
+        "w": 12,
+        "h": 9
+      },
+      "query": {
+        "mode": "metric",
+        "metric": "auth_fail",
+        "groupBy": "src_ip"
+      },
+      "options": {
+        "limit": 8
+      }
+    },
+    {
+      "id": 7,
+      "type": "calls",
+      "title": "High-risk destinations",
+      "gridPos": {
+        "x": 12,
+        "y": 13,
+        "w": 12,
+        "h": 9
+      },
+      "query": {
+        "mode": "metric",
+        "q": "finding:HIGH_RISK_DESTINATION"
+      },
+      "options": {}
+    }
+  ]
+}

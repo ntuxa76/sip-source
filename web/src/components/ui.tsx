@@ -140,10 +140,10 @@ export function RegStatus({ status }: { status: string }) {
 }
 
 const buttonVariant = {
-  default: "bg-raised border-line-2 text-ink hover:bg-hover",
-  primary: "bg-accent border-accent text-on-accent hover:bg-accent-strong hover:border-accent-strong",
-  ghost: "border-transparent text-ink-2 hover:bg-hover hover:text-ink",
-  danger: "bg-raised border-line-2 text-crit hover:bg-crit-wash hover:border-crit",
+  default: "bg-raised border-line-2 text-ink enabled:hover:bg-hover",
+  primary: "bg-accent border-accent text-on-accent enabled:hover:bg-accent-strong enabled:hover:border-accent-strong",
+  ghost: "border-transparent text-ink-2 enabled:hover:bg-hover enabled:hover:text-ink",
+  danger: "bg-raised border-line-2 text-crit enabled:hover:bg-crit-wash enabled:hover:border-crit",
 };
 
 const buttonSize = {
@@ -162,7 +162,7 @@ export function Button({
   return (
     <button
       {...rest}
-      className={`inline-flex items-center justify-center shrink-0 rounded-md border font-medium whitespace-nowrap transition-colors duration-100 disabled:opacity-50 disabled:pointer-events-none ${buttonSize[size]} ${buttonVariant[variant]} ${className}`}
+      className={`inline-flex items-center justify-center shrink-0 rounded-md border font-medium whitespace-nowrap transition-colors duration-100 disabled:opacity-50 ${buttonSize[size]} ${buttonVariant[variant]} ${className}`}
     >
       {children}
     </button>
@@ -177,7 +177,7 @@ export function IconButton({ label, children, className = "", ...rest }: Compone
       aria-label={label}
       title={label}
       {...rest}
-      className={`inline-grid place-items-center w-7 h-7 shrink-0 rounded-md text-ink-2 transition-colors duration-100 hover:bg-hover hover:text-ink disabled:opacity-50 disabled:pointer-events-none ${className}`}
+      className={`inline-grid place-items-center w-7 h-7 shrink-0 rounded-md text-ink-2 transition-colors duration-100 enabled:hover:bg-hover enabled:hover:text-ink disabled:opacity-50 ${className}`}
     >
       {children}
     </button>

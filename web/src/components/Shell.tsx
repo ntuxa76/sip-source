@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, Navigate, Outlet, useNavigate, useRouterState, useSearch } from "@tanstack/react-router";
-import { BarChart3, Check, ChevronDown, ChevronLeft, ChevronRight, Clock, Compass, Database, LayoutDashboard, LogOut, Menu, Moon, Radio, RefreshCw, Search, Server, Settings, Sun, Users, X } from "lucide-react";
+import { BarChart3, Check, ChevronDown, ChevronLeft, ChevronRight, Clock, Compass, Database, LayoutDashboard, LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, Radio, RefreshCw, Search, Server, Settings, Sun, UserRound, Users, X } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { get, post } from "../lib/api";
@@ -29,11 +29,19 @@ function useNav() {
 const menuItem = "w-full flex items-center gap-2 px-2 py-1.5 rounded-sm text-left hover:bg-hover focus-visible:-outline-offset-2";
 
 /** Capture health at a glance, for people who can see the sources page. */
-function CaptureStatus() {
+function CaptureStatus({ compact }: { compact: boolean }) {
   const { data } = useQuery({ queryKey: ["admin", "sources"], queryFn: () => get("/admin/sources"), refetchInterval: 30_000 });
   if (!data) return null;
   const active = data.filter((a: any) => a.status !== "silent").length;
   const silent = data.length - active;
+  const summary = data.length === 0 ? "No HEP received yet. Point your SIP servers at port 9060." : silent === 0 ? "All sources are sending." : `${silent} source${silent === 1 ? " is" : "s are"} silent.`;
+  if (compact) {
+    return (
+      <Link to="/admin/$section" params={{ section: "sources" } as any} title={`Capture: ${active}/${data.length} sources. ${summary}`} aria-label={`Capture: ${summary}`} className="grid place-items-center h-10 shrink-0 border-t border-line hover:bg-hover focus-visible:-outline-offset-2">
+        <span className={`w-2 h-2 rounded-full ${active > 0 ? "bg-good" : "bg-ink-3"}`} aria-hidden />
+      </Link>
+    );
+  }
   return (
     <Link to="/admin/$section" params={{ section: "sources" } as any} className="block shrink-0 px-4 py-2.5 border-t border-line hover:bg-hover focus-visible:-outline-offset-2">
       <div className="flex items-center gap-2">
@@ -43,15 +51,13 @@ function CaptureStatus() {
           {active}/{data.length} sources
         </span>
       </div>
-      <p className="mt-0.5 text-xs text-ink-3">
-        {data.length === 0 ? "No HEP received yet. Point your SIP servers at port 9060." : silent === 0 ? "All sources are sending." : `${silent} source${silent === 1 ? " is" : "s are"} silent.`}
-      </p>
+      <p className="mt-0.5 text-xs text-ink-3">{summary}</p>
     </Link>
   );
 }
 
 export function Shell() {
-  const { can, theme, toggleTheme, me, settings } = usePrefs();
+  const { can, theme, toggleTheme, me, settings, prefs, savePrefs } = usePrefs();
   const client = useQueryClient();
   const nav = useNav();
   const path = useRouterState({ select: (s) => s.location.pathname });
@@ -63,6 +69,9 @@ export function Shell() {
   // Below 1024 px the sidebar is a drawer opened from the top bar.
   const [menuOpen, setMenuOpen] = useState(false);
   const navRef = useRef<HTMLElement>(null);
+  // On wide screens the sidebar can shrink to icons. The choice is kept per user; the phone
+  // drawer always opens in full.
+  const collapsed = Boolean(prefs.sidebarCollapsed) && !menuOpen;
 
   useEffect(() => setMenuOpen(false), [path]);
 
@@ -99,50 +108,81 @@ export function Shell() {
         Skip to content
       </a>
       {menuOpen && <div className="lg:hidden fixed inset-0 z-30 bg-scrim" onClick={() => setMenuOpen(false)} aria-hidden />}
-      <aside id="sidebar" className={`${menuOpen ? "max-lg:fixed max-lg:inset-y-0 max-lg:left-0 max-lg:z-40 max-lg:shadow-pop" : "max-lg:hidden"} w-56 shrink-0 flex flex-col bg-surface border-r border-line`}>
-        <div className="h-12 shrink-0 flex items-center gap-2.5 px-4 border-b border-line">
-          <Link to={homePath(can, settings.sql_enabled)} title="Home" className="flex items-center gap-2.5 min-w-0 -mx-1 px-1 py-1 rounded-md hover:bg-hover">
+      <aside
+        id="sidebar"
+        className={`${menuOpen ? "max-lg:fixed max-lg:inset-y-0 max-lg:left-0 max-lg:z-40 max-lg:shadow-pop" : "max-lg:hidden"} ${collapsed ? "w-14" : "w-56"} shrink-0 flex flex-col bg-sidebar border-r border-line transition-[width] duration-150`}
+      >
+        <div className={`h-12 shrink-0 flex items-center border-b border-line ${collapsed ? "justify-center" : "gap-2.5 px-4"}`}>
+          <Link to={homePath(can, settings.sql_enabled)} title="Home" aria-label={collapsed ? `${settings.app_name} home` : undefined} className="flex items-center gap-2.5 min-w-0 -mx-1 px-1 py-1 rounded-md hover:bg-hover">
             <img src="/logo.png" alt="" width={24} height={24} className="shrink-0" />
-            <span className="text-sm font-semibold truncate">{settings.app_name}</span>
+            {!collapsed && <span className="text-sm font-semibold truncate">{settings.app_name}</span>}
           </Link>
           <IconButton label="Close menu" onClick={() => setMenuOpen(false)} className="lg:hidden ml-auto -mr-2">
             <X size={16} aria-hidden />
           </IconButton>
         </div>
-        <nav ref={navRef} aria-label="Main" className="flex-1 min-h-0 pb-3 overflow-y-auto">
-          {nav.map((g) => (
+        <nav ref={navRef} aria-label="Main" className="flex-1 min-h-0 py-1 overflow-y-auto overflow-x-hidden">
+          {nav.map((g, i) => (
             <div key={g.group}>
-              <div className="px-4 pt-4 pb-1 text-2xs font-semibold uppercase tracking-[0.06em] text-ink-3">{g.group}</div>
-              {g.items.map((n) => (
-                <Link
-                  key={n.id}
-                  to={n.to}
-                  search={{ from: search.from, to: search.to, src: search.src } as any}
-                  aria-current={active(n.to) ? "page" : undefined}
-                  className={`flex items-center gap-2.5 h-8 pl-3.5 pr-3 border-l-2 focus-visible:-outline-offset-2 ${
-                    active(n.to) ? "border-accent bg-accent-wash text-ink font-medium" : "border-transparent text-ink-2 hover:bg-hover hover:text-ink"
-                  }`}
-                >
-                  <n.icon size={16} aria-hidden className={`shrink-0 ${active(n.to) ? "text-accent" : "text-ink-3"}`} />
-                  <span className="truncate">{n.label}</span>
-                </Link>
-              ))}
+              {collapsed ? (
+                i > 0 && <div className="mx-3 my-2 border-t border-line" aria-hidden />
+              ) : (
+                <div className="px-4 pt-3 pb-1 text-2xs font-semibold uppercase tracking-[0.06em] text-ink-3">{g.group}</div>
+              )}
+              {g.items.map((n) => {
+                const on = active(n.to);
+                return (
+                  <Link
+                    key={n.id}
+                    to={n.to}
+                    search={{ from: search.from, to: search.to, src: search.src } as any}
+                    aria-current={on ? "page" : undefined}
+                    title={collapsed ? n.label : undefined}
+                    className={`flex items-center h-8 my-px rounded-md focus-visible:-outline-offset-2 ${collapsed ? "justify-center w-10 mx-auto" : "gap-2.5 mx-2 px-2.5"} ${
+                      on ? "bg-sidebar-active text-ink font-medium shadow-[inset_0_0_0_1px_var(--line)]" : "text-ink-2 hover:bg-hover hover:text-ink"
+                    }`}
+                  >
+                    <n.icon size={16} aria-hidden className={`shrink-0 ${on ? "text-accent" : "text-ink-3"}`} />
+                    {collapsed ? <span className="sr-only">{n.label}</span> : <span className="truncate">{n.label}</span>}
+                  </Link>
+                );
+              })}
             </div>
           ))}
         </nav>
-        {can("system_view") && <CaptureStatus />}
-        <div className="shrink-0 flex items-center gap-0.5 p-2 border-t border-line">
-          <Link to="/preferences" title="Preferences" className="flex-1 min-w-0 px-2 py-1 rounded-md hover:bg-hover">
-            <span className="block truncate font-medium leading-[18px]">{me.display_name || me.username}</span>
-            <span className="block truncate text-xs text-ink-3">{me.role}</span>
-          </Link>
-          <IconButton label="Switch theme" onClick={toggleTheme}>
-            {theme === "dark" ? <Sun size={15} aria-hidden /> : <Moon size={15} aria-hidden />}
-          </IconButton>
-          <IconButton label="Sign out" onClick={() => logout.mutate()}>
-            <LogOut size={15} aria-hidden />
-          </IconButton>
-        </div>
+        {can("system_view") && <CaptureStatus compact={collapsed} />}
+        {collapsed ? (
+          <div className="shrink-0 flex flex-col items-center gap-0.5 py-2 border-t border-line">
+            <Link to="/preferences" title={`${me.display_name || me.username}: preferences`} aria-label="Preferences" className="grid place-items-center w-7 h-7 rounded-md text-ink-2 hover:bg-hover hover:text-ink">
+              <UserRound size={15} aria-hidden />
+            </Link>
+            <IconButton label="Switch theme" onClick={toggleTheme}>
+              {theme === "dark" ? <Sun size={15} aria-hidden /> : <Moon size={15} aria-hidden />}
+            </IconButton>
+            <IconButton label="Sign out" onClick={() => logout.mutate()}>
+              <LogOut size={15} aria-hidden />
+            </IconButton>
+            <IconButton label="Expand sidebar" onClick={() => savePrefs({ sidebarCollapsed: false })} className="max-lg:hidden">
+              <PanelLeftOpen size={15} aria-hidden />
+            </IconButton>
+          </div>
+        ) : (
+          <div className="shrink-0 flex items-center gap-0.5 p-2 border-t border-line">
+            <Link to="/preferences" title="Preferences" className="flex-1 min-w-0 px-2 py-1 rounded-md hover:bg-hover">
+              <span className="block truncate font-medium leading-[18px]">{me.display_name || me.username}</span>
+              <span className="block truncate text-xs text-ink-3">{me.role}</span>
+            </Link>
+            <IconButton label="Switch theme" onClick={toggleTheme}>
+              {theme === "dark" ? <Sun size={15} aria-hidden /> : <Moon size={15} aria-hidden />}
+            </IconButton>
+            <IconButton label="Sign out" onClick={() => logout.mutate()}>
+              <LogOut size={15} aria-hidden />
+            </IconButton>
+            <IconButton label="Collapse sidebar" onClick={() => savePrefs({ sidebarCollapsed: true })} className="max-lg:hidden">
+              <PanelLeftClose size={15} aria-hidden />
+            </IconButton>
+          </div>
+        )}
       </aside>
       <div className="flex-1 min-w-0 flex flex-col">
         <TopBar menuOpen={menuOpen} onMenu={() => setMenuOpen(true)} />

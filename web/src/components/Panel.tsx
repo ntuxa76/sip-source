@@ -303,7 +303,7 @@ function SqlDialog({ sql, source, onClose }: { sql: string; source: string; onCl
   return (
     <Dialog title="Query" onClose={onClose} width={680}>
       <pre className="font-mono text-xs bg-sunken border border-line rounded-md p-3 overflow-x-auto whitespace-pre-wrap">{sql || "This panel has no SQL form."}</pre>
-      <p className="text-ink-3 text-xs mt-2">Source: {source}. To change it, edit the dashboard and switch the panel to SQL.</p>
+      <p className="text-ink-3 text-xs mt-2">Runs on {source}. To change the query, edit the dashboard and switch the panel to SQL.</p>
     </Dialog>
   );
 }

@@ -10,8 +10,9 @@ FROM docker.io/library/rust:1.92-bookworm AS core
 WORKDIR /src
 COPY Cargo.toml Cargo.lock ./
 COPY crates ./crates
+COPY schema.sql ./
 COPY --from=web /src/web/dist ./web/dist
-RUN cargo build --release -p vpd
+RUN cargo build --release -p sip-source
 
 # The engine behind the Local file storage, stripped of debug symbols.
 FROM docker.io/library/rust:1.92-bookworm AS engine
@@ -21,10 +22,10 @@ RUN strip --strip-all -o /clickhouse /tmp/clickhouse && rm /tmp/clickhouse && mk
 FROM gcr.io/distroless/cc-debian12:nonroot
 LABEL org.opencontainers.image.title="sip-source" \
       org.opencontainers.image.description="SIP/VoIP capture, troubleshooting and monitoring panel"
-COPY --from=core /src/target/release/vpd /usr/local/bin/vpd
+COPY --from=core /src/target/release/sip-source /usr/local/bin/sip-source
 COPY --from=engine /clickhouse /usr/local/bin/clickhouse
 COPY --from=engine --chown=65532:65532 /data /data
 ENV SS_LISTEN=0.0.0.0:8080 SS_DATA_DIR=/data
 EXPOSE 8080 9060/udp 9060/tcp
-HEALTHCHECK --interval=15s --timeout=5s --start-period=60s --retries=4 CMD ["/usr/local/bin/vpd", "healthcheck"]
-ENTRYPOINT ["/usr/local/bin/vpd"]
+HEALTHCHECK --interval=15s --timeout=5s --start-period=60s --retries=4 CMD ["/usr/local/bin/sip-source", "healthcheck"]
+ENTRYPOINT ["/usr/local/bin/sip-source"]
