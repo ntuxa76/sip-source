@@ -1,0 +1,162 @@
+{
+  "schemaVersion": 1,
+  "uid": "registrations",
+  "title": "Registrations",
+  "description": "Active registrations, attempts, failures, delay and failing AoRs",
+  "tags": [
+    "built-in"
+  ],
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "refresh": "30s",
+  "sharedCrosshair": null,
+  "variables": [
+    {
+      "name": "capture_id",
+      "label": "Capture ID",
+      "type": "field",
+      "field": "capture",
+      "multi": true
+    }
+  ],
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Active registrations",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "query": {
+        "mode": "metric",
+        "metric": "reg_active"
+      },
+      "options": {}
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Attempts per second",
+      "gridPos": {
+        "x": 6,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "query": {
+        "mode": "metric",
+        "metric": "reg_attempts"
+      },
+      "options": {}
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Success",
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "query": {
+        "mode": "metric",
+        "metric": "reg_success"
+      },
+      "options": {}
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "RRD p95",
+      "gridPos": {
+        "x": 18,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "query": {
+        "mode": "metric",
+        "metric": "reg_rrd"
+      },
+      "options": {}
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Active registrations by group",
+      "gridPos": {
+        "x": 0,
+        "y": 4,
+        "w": 12,
+        "h": 9
+      },
+      "query": {
+        "mode": "metric",
+        "metric": "reg_active",
+        "groupBy": "ingress_group"
+      },
+      "options": {
+        "viz": "area"
+      }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Failures by code",
+      "gridPos": {
+        "x": 12,
+        "y": 4,
+        "w": 12,
+        "h": 9
+      },
+      "query": {
+        "mode": "metric",
+        "metric": "reg_failures",
+        "groupBy": "status"
+      },
+      "options": {
+        "viz": "stacked"
+      }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Attempts per second by group",
+      "gridPos": {
+        "x": 0,
+        "y": 13,
+        "w": 12,
+        "h": 9
+      },
+      "query": {
+        "mode": "metric",
+        "metric": "reg_attempts",
+        "groupBy": "ingress_group"
+      },
+      "options": {
+        "viz": "line"
+      }
+    },
+    {
+      "id": 8,
+      "type": "failing_aors",
+      "title": "Top failing AoRs",
+      "gridPos": {
+        "x": 12,
+        "y": 13,
+        "w": 12,
+        "h": 9
+      },
+      "query": {
+        "mode": "metric"
+      },
+      "options": {}
+    }
+  ]
+}

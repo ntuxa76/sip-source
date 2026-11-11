@@ -1,0 +1,276 @@
+{
+  "schemaVersion": 1,
+  "uid": "overview",
+  "title": "Overview",
+  "description": "CPS, concurrency, success ratios, failures, registrations, quality and ingest health",
+  "tags": [
+    "built-in"
+  ],
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "refresh": "30s",
+  "sharedCrosshair": null,
+  "variables": [
+    {
+      "name": "capture_id",
+      "label": "Capture ID",
+      "type": "field",
+      "field": "capture",
+      "multi": true
+    }
+  ],
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "CPS",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      },
+      "query": {
+        "mode": "metric",
+        "metric": "cps"
+      },
+      "options": {}
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Concurrent calls",
+      "gridPos": {
+        "x": 4,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      },
+      "query": {
+        "mode": "metric",
+        "metric": "concurrent"
+      },
+      "options": {}
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "ASR",
+      "gridPos": {
+        "x": 8,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      },
+      "query": {
+        "mode": "metric",
+        "metric": "asr"
+      },
+      "options": {}
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "NER",
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      },
+      "query": {
+        "mode": "metric",
+        "metric": "ner"
+      },
+      "options": {}
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "PDD p95",
+      "gridPos": {
+        "x": 16,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      },
+      "query": {
+        "mode": "metric",
+        "metric": "pdd_p95"
+      },
+      "options": {}
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Active registrations",
+      "gridPos": {
+        "x": 20,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      },
+      "query": {
+        "mode": "metric",
+        "metric": "reg_active"
+      },
+      "options": {}
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "ASR by trunk",
+      "gridPos": {
+        "x": 0,
+        "y": 4,
+        "w": 16,
+        "h": 9
+      },
+      "query": {
+        "mode": "metric",
+        "metric": "asr",
+        "groupBy": "trunk",
+        "filter": "direction:outbound",
+        "top": 4,
+        "minInterval": 900
+      },
+      "options": {
+        "viz": "line",
+        "yMax": 100
+      }
+    },
+    {
+      "id": 15,
+      "type": "top",
+      "title": "How calls ended",
+      "gridPos": {
+        "x": 16,
+        "y": 4,
+        "w": 8,
+        "h": 9
+      },
+      "query": {
+        "mode": "metric",
+        "metric": "attempts",
+        "groupBy": "end_cause"
+      },
+      "options": {
+        "top": 8,
+        "description": "Calls in the range by end cause: hangups, busy, no answer, rejections and timeouts."
+      }
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Failures by status class",
+      "gridPos": {
+        "x": 0,
+        "y": 13,
+        "w": 12,
+        "h": 9
+      },
+      "query": {
+        "mode": "metric",
+        "metric": "failures",
+        "groupBy": "status_class"
+      },
+      "options": {
+        "viz": "stacked"
+      }
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Concurrent calls by direction",
+      "gridPos": {
+        "x": 12,
+        "y": 13,
+        "w": 12,
+        "h": 9
+      },
+      "query": {
+        "mode": "metric",
+        "metric": "concurrent",
+        "groupBy": "direction"
+      },
+      "options": {
+        "viz": "area"
+      }
+    },
+    {
+      "id": 11,
+      "type": "top",
+      "title": "Top failing trunks",
+      "gridPos": {
+        "x": 0,
+        "y": 22,
+        "w": 6,
+        "h": 9
+      },
+      "query": {
+        "mode": "metric",
+        "metric": "failures",
+        "groupBy": "trunk"
+      },
+      "options": {
+        "limit": 6
+      }
+    },
+    {
+      "id": 12,
+      "type": "top",
+      "title": "Top failing destinations",
+      "gridPos": {
+        "x": 6,
+        "y": 22,
+        "w": 6,
+        "h": 9
+      },
+      "query": {
+        "mode": "metric",
+        "metric": "failures",
+        "groupBy": "prefix"
+      },
+      "options": {
+        "limit": 6
+      }
+    },
+    {
+      "id": 13,
+      "type": "histogram",
+      "title": "MOS distribution",
+      "gridPos": {
+        "x": 12,
+        "y": 22,
+        "w": 6,
+        "h": 9
+      },
+      "query": {
+        "mode": "metric",
+        "metric": "mos_p50"
+      },
+      "options": {}
+    },
+    {
+      "id": 14,
+      "type": "timeseries",
+      "title": "HEP packets/s",
+      "gridPos": {
+        "x": 18,
+        "y": 22,
+        "w": 6,
+        "h": 9
+      },
+      "query": {
+        "mode": "metric",
+        "metric": "hep_pps",
+        "groupBy": "agent"
+      },
+      "options": {
+        "viz": "line"
+      }
+    }
+  ]
+}

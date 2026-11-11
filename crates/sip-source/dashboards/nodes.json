@@ -1,0 +1,83 @@
+{
+  "schemaVersion": 1,
+  "uid": "nodes",
+  "title": "SIP nodes",
+  "description": "Message rates, retransmissions and per-hop delay per node",
+  "tags": [
+    "built-in"
+  ],
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "refresh": "30s",
+  "sharedCrosshair": null,
+  "variables": [
+    {
+      "name": "capture_id",
+      "label": "Capture ID",
+      "type": "field",
+      "field": "capture",
+      "multi": true
+    }
+  ],
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Messages per second by method",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 12,
+        "h": 9
+      },
+      "query": {
+        "mode": "metric",
+        "metric": "sip_msgs",
+        "groupBy": "method"
+      },
+      "options": {
+        "viz": "stacked"
+      }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Responses per second by class",
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 12,
+        "h": 9
+      },
+      "query": {
+        "mode": "metric",
+        "metric": "sip_msgs",
+        "groupBy": "status_class"
+      },
+      "options": {
+        "viz": "stacked"
+      }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Messages per second by node",
+      "gridPos": {
+        "x": 0,
+        "y": 9,
+        "w": 8,
+        "h": 9
+      },
+      "query": {
+        "mode": "metric",
+        "metric": "sip_msgs",
+        "groupBy": "node"
+      },
+      "options": {
+        "viz": "line"
+      }
+    }
+  ]
+}

@@ -1,0 +1,202 @@
+{
+  "schemaVersion": 1,
+  "uid": "calls",
+  "title": "Calls & traffic",
+  "description": "Attempts, answer ratios, Erlangs, status codes and top talkers",
+  "tags": [
+    "built-in"
+  ],
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "refresh": "30s",
+  "sharedCrosshair": null,
+  "variables": [
+    {
+      "name": "capture_id",
+      "label": "Capture ID",
+      "type": "field",
+      "field": "capture",
+      "multi": true
+    }
+  ],
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Attempts",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "query": {
+        "mode": "metric",
+        "metric": "attempts"
+      },
+      "options": {}
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Answered",
+      "gridPos": {
+        "x": 6,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "query": {
+        "mode": "metric",
+        "metric": "answered"
+      },
+      "options": {}
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "ACD",
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "query": {
+        "mode": "metric",
+        "metric": "acd"
+      },
+      "options": {}
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Traffic",
+      "gridPos": {
+        "x": 18,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "query": {
+        "mode": "metric",
+        "metric": "traffic"
+      },
+      "options": {}
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Attempts by direction",
+      "gridPos": {
+        "x": 0,
+        "y": 4,
+        "w": 12,
+        "h": 9
+      },
+      "query": {
+        "mode": "metric",
+        "metric": "attempts",
+        "groupBy": "direction"
+      },
+      "options": {
+        "viz": "stacked"
+      }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Erlangs by trunk",
+      "gridPos": {
+        "x": 12,
+        "y": 4,
+        "w": 12,
+        "h": 9
+      },
+      "query": {
+        "mode": "metric",
+        "metric": "erlangs",
+        "groupBy": "trunk"
+      },
+      "options": {
+        "viz": "area"
+      }
+    },
+    {
+      "id": 7,
+      "type": "heatmap",
+      "title": "Status codes over time",
+      "gridPos": {
+        "x": 0,
+        "y": 13,
+        "w": 24,
+        "h": 12
+      },
+      "query": {
+        "mode": "metric",
+        "metric": "attempts",
+        "groupBy": "status"
+      },
+      "options": {}
+    },
+    {
+      "id": 8,
+      "type": "top",
+      "title": "Q.850 causes",
+      "gridPos": {
+        "x": 0,
+        "y": 25,
+        "w": 8,
+        "h": 9
+      },
+      "query": {
+        "mode": "metric",
+        "metric": "failures",
+        "groupBy": "q850"
+      },
+      "options": {
+        "limit": 8
+      }
+    },
+    {
+      "id": 9,
+      "type": "top",
+      "title": "End causes",
+      "gridPos": {
+        "x": 8,
+        "y": 25,
+        "w": 8,
+        "h": 9
+      },
+      "query": {
+        "mode": "metric",
+        "metric": "attempts",
+        "groupBy": "end_cause"
+      },
+      "options": {
+        "limit": 8
+      }
+    },
+    {
+      "id": 10,
+      "type": "top",
+      "title": "Top callers by volume",
+      "gridPos": {
+        "x": 16,
+        "y": 25,
+        "w": 8,
+        "h": 9
+      },
+      "query": {
+        "mode": "metric",
+        "metric": "attempts",
+        "groupBy": "caller"
+      },
+      "options": {
+        "limit": 8
+      }
+    }
+  ]
+}

@@ -21,6 +21,7 @@ export interface UserPrefs {
   searchColumns?: string[];
   searchFacets?: string[];
   searchPageSize?: number;
+  sidebarCollapsed?: boolean;
 }
 
 export interface AppSettings {

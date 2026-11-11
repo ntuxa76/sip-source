@@ -5,14 +5,14 @@ import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } fro
 import GridLayout, { useContainerWidth } from "react-grid-layout";
 import { PanelView, TimePanelForExplore } from "../components/Panel";
 import type { PanelContext } from "../components/Panel";
-import { Button, Card, Dialog, Empty, ErrorNote, Field, IconButton, Loading, PageHeader, Select, fieldClass, inputClass, popoverClass, useDismiss } from "../components/ui";
+import { Button, Card, Dialog, Empty, ErrorNote, Field, IconButton, Loading, PageHeader, Select, Tabs, fieldClass, inputClass, popoverClass, useDismiss } from "../components/ui";
 import { del, get, post, put } from "../lib/api";
 import type { MetricInfo } from "../lib/api";
 import { homePath } from "../lib/access";
 import { usePrefs, useRange } from "../lib/context";
 import { GRID_COLS, GRID_MARGIN, ROW_HEIGHT, VARIABLE_FIELDS, emptyDashboard, newPanel, nextPanelId, panelHeightPx, parseRefresh } from "../lib/dashboard";
 import type { Dashboard, PanelDef, Variable } from "../lib/dashboard";
-import { fmtDateTime } from "../lib/format";
+import { downloadBlob, fmtDateTime } from "../lib/format";
 
 const PanelEditor = lazy(() => import("./PanelEditor"));
 
@@ -150,11 +150,60 @@ function VariableSelect({ variable, value, onChange }: { variable: Variable; val
   );
 }
 
+/** Dashboard settings: the general fields, and the whole dashboard as JSON to copy, download or replace. */
 function SettingsDialog({ board, onChange, onClose, canDelete, onDelete }: { board: Dashboard; onChange: (d: Dashboard) => void; onClose: () => void; canDelete: boolean; onDelete: () => void }) {
+  const [tab, setTab] = useState("general");
+  const [text, setText] = useState(() => JSON.stringify(board, null, 2));
+  const [problem, setProblem] = useState("");
+  const [copied, setCopied] = useState(false);
   const set = (patch: Partial<Dashboard>) => onChange({ ...board, ...patch });
   const setVar = (i: number, patch: Partial<Variable>) => set({ variables: board.variables.map((v, j) => (j === i ? { ...v, ...patch } : v)) });
+  const switchTab = (t: string) => {
+    // The JSON always shows the dashboard as it is now, including changes on the other tab.
+    if (t === "json") {
+      setText(JSON.stringify(board, null, 2));
+      setProblem("");
+      setCopied(false);
+    }
+    setTab(t);
+  };
+  const apply = () => {
+    try {
+      const parsed = JSON.parse(text);
+      if (!parsed || typeof parsed !== "object" || !Array.isArray(parsed.panels)) throw new Error('"panels" must be a list');
+      onChange({ ...parsed, uid: board.uid });
+      onClose();
+    } catch (e) {
+      setProblem(`Not applied: ${(e as Error).message}`);
+    }
+  };
+  const fileName = `${(board.title || "dashboard").replace(/[^\w.-]+/g, "-").toLowerCase()}.json`;
   return (
-    <Dialog title="Dashboard settings" onClose={onClose}>
+    <Dialog
+      title="Dashboard settings"
+      onClose={onClose}
+      width={720}
+      footer={
+        tab === "json" ? (
+          <>
+            <span className="mr-auto text-xs text-ink-3">Apply replaces the dashboard being edited. Save it afterwards to keep it.</span>
+            <Button onClick={async () => { await navigator.clipboard?.writeText(text); setCopied(true); }}><Copy size={14} />{copied ? "Copied" : "Copy"}</Button>
+            <Button onClick={() => downloadBlob(fileName, text, "application/json")}><Download size={14} />Download</Button>
+            <Button variant="primary" onClick={apply}>Apply</Button>
+          </>
+        ) : undefined
+      }
+    >
+      <div className="-mx-4 -mt-4 mb-4">
+        <Tabs tabs={[{ id: "general", label: "General" }, { id: "json", label: "JSON" }]} active={tab} onChange={switchTab} />
+      </div>
+      {tab === "json" ? (
+        <>
+          <p className="text-ink-2 mb-2">The whole dashboard as one JSON document. Copy it to move the dashboard to another system, or paste a dashboard here to replace this one.</p>
+          <textarea spellCheck={false} value={text} onChange={(e) => setText(e.target.value)} aria-label="Dashboard JSON" className={`${fieldClass} block w-full h-[420px] p-2.5 font-mono text-xs`} />
+          {problem && <p role="alert" className="text-crit mt-2">{problem}</p>}
+        </>
+      ) : (
       <div className="space-y-3">
         <Field label="Name"><input value={board.title} onChange={(e) => set({ title: e.target.value })} className={input} /></Field>
         <Field label="Description"><input value={board.description} onChange={(e) => set({ description: e.target.value })} className={input} /></Field>
@@ -188,38 +237,7 @@ function SettingsDialog({ board, onChange, onClose, canDelete, onDelete }: { boa
           </div>
         )}
       </div>
-    </Dialog>
-  );
-}
-
-function JsonDialog({ board, onApply, onClose }: { board: Dashboard; onApply: (d: Dashboard) => void; onClose: () => void }) {
-  const [text, setText] = useState(() => JSON.stringify(board, null, 2));
-  const [problem, setProblem] = useState("");
-  const [copied, setCopied] = useState(false);
-  const apply = () => {
-    try {
-      const parsed = JSON.parse(text);
-      if (!Array.isArray(parsed.panels)) throw new Error('"panels" must be a list');
-      onApply({ ...parsed, uid: board.uid });
-      onClose();
-    } catch (e) {
-      setProblem((e as Error).message);
-    }
-  };
-  return (
-    <Dialog
-      title="Dashboard JSON"
-      onClose={onClose}
-      width={860}
-      footer={
-        <>
-          <Button onClick={async () => { await navigator.clipboard?.writeText(text); setCopied(true); }}><Copy size={14} />{copied ? "Copied" : "Copy"}</Button>
-          <Button variant="primary" onClick={apply}>Apply</Button>
-        </>
-      }
-    >
-      <textarea spellCheck={false} value={text} onChange={(e) => setText(e.target.value)} aria-label="Dashboard JSON" className={`${fieldClass} block w-full h-[440px] p-2.5 font-mono text-xs`} />
-      {problem && <p role="alert" className="text-crit mt-2">{problem}</p>}
+      )}
     </Dialog>
   );
 }
@@ -299,7 +317,7 @@ export function DashboardView({ id }: { id: string }) {
   const { data, error } = useQuery({ queryKey: ["dashboard", id], queryFn: () => get(`/dashboards/${id}`) });
   const [draft, setDraft] = useState<Dashboard | null>(null);
   const [panelEdit, setPanelEdit] = useState<number | null>(null);
-  const [dialog, setDialog] = useState<"settings" | "json" | "versions" | null>(null);
+  const [dialog, setDialog] = useState<"settings" | "versions" | null>(null);
   const [problem, setProblem] = useState("");
   const applied = useRef("");
 
@@ -376,13 +394,11 @@ export function DashboardView({ id }: { id: string }) {
             <div className="flex flex-wrap gap-2">
               <Button onClick={() => { const p = newPanel(draft); update((d) => ({ ...d, panels: [...d.panels, p] })); setPanelEdit(p.id); }}><Plus size={14} />Add panel</Button>
               <Button onClick={() => setDialog("settings")}><Settings2 size={14} />Settings</Button>
-              <Button onClick={() => setDialog("json")}><Braces size={14} />JSON</Button>
               <Button onClick={() => { setDraft(null); setProblem(""); }}>Discard</Button>
               <Button variant="primary" onClick={() => save.mutate()} disabled={save.isPending}><Save size={14} />Save</Button>
             </div>
           ) : (
             <div className="flex flex-wrap gap-2">
-              <Button onClick={() => setDialog("json")}><Download size={14} />JSON</Button>
               {can("dashboards_edit") && <Button onClick={() => setDialog("versions")}><History size={14} />History</Button>}
               <Button onClick={toggleKiosk}><Maximize2 size={14} />{search.kiosk ? "Exit full screen" : "Full screen"}</Button>
               {can("dashboards_edit") && <Button variant="primary" onClick={() => setDraft(data.dashboard)}><Pencil size={14} />Edit</Button>}
@@ -413,7 +429,6 @@ export function DashboardView({ id }: { id: string }) {
         </Suspense>
       )}
       {dialog === "settings" && draft && <SettingsDialog board={draft} onChange={setDraft} onClose={() => setDialog(null)} canDelete={can("dashboards_delete")} onDelete={() => confirm(`Delete "${draft.title}"? This can't be undone.`) && remove.mutate()} />}
-      {dialog === "json" && <JsonDialog board={board} onClose={() => setDialog(null)} onApply={(d) => setDraft(d)} />}
       {dialog === "versions" && <VersionsDialog uid={id} tz={tz} onClose={() => setDialog(null)} onRestored={() => { setDialog(null); client.invalidateQueries({ queryKey: ["dashboard", id] }); }} />}
     </div>
   );
