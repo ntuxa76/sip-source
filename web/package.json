@@ -1,7 +1,7 @@
 {
   "name": "sip-source-web",
   "private": true,
-  "version": "0.9.0",
+  "version": "0.9.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -22,7 +22,8 @@
     "lucide-react": "^0.475.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "react-grid-layout": "^2.3.0"
+    "react-grid-layout": "^2.3.0",
+    "thinking-orbs": "0.3.2"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.0.0",

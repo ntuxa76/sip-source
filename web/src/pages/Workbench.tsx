@@ -6,6 +6,7 @@ import { basicSetup, EditorView } from "codemirror";
 import { ChevronRight, Play } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button, Card, Empty, ErrorNote, Loading, PageHeader, Tabs } from "../components/ui";
+import { Busy } from "../components/Orb";
 import { get, post } from "../lib/api";
 import { usePrefs, useRange } from "../lib/context";
 import { fmtDateTime } from "../lib/format";
@@ -43,7 +44,7 @@ export function WorkbenchPage() {
   const execute = () => view.current && run.mutate(view.current.state.doc.toString());
 
   if (schema.error) return <ErrorNote error={schema.error} />;
-  if (!schema.data || !library.data) return <Loading />;
+  if (!schema.data || !library.data) return <Loading page label="Loading the query library…" />;
   const categories: string[] = [...new Set<string>(library.data.map((l: any) => l.category))];
   const result = run.data;
   const cell = (v: unknown, type: string) => {
@@ -93,11 +94,11 @@ export function WorkbenchPage() {
             <div ref={editorEl} className="h-[220px] overflow-hidden rounded-t-lg" />
             <div className="flex items-center justify-between gap-3 px-3 py-2 border-t border-line">
               <span className="text-ink-3 text-xs">{`Running on ${storage.data?.name || "the selected storage"} as read-only.`}</span>
-              <Button variant="primary" onClick={execute} disabled={run.isPending}><Play size={14} />Run</Button>
+              <Button variant="primary" onClick={execute} disabled={run.isPending}><Busy active={run.isPending} work="query" icon={<Play size={14} />} inverse>{run.isPending ? "Running…" : "Run"}</Busy></Button>
             </div>
           </Card>
           <Card title="Results" right={result && <span className="tnum">{result.rows.length} rows{result.stats.truncated ? " (cut off)" : ""} · {result.stats.rows_read.toLocaleString()} rows read · {result.stats.duration_ms} ms</span>}>
-            {run.isError ? <ErrorNote error={run.error} /> : !result ? <Empty>Pick a query or write your own, then run it.</Empty> : (
+            {run.isPending ? <Loading work="query" label="Running the query…" /> : run.isError ? <ErrorNote error={run.error} /> : !result ? <Empty>Pick a query or write your own, then run it.</Empty> : (
               <div className="overflow-auto max-h-[420px]">
                 <table className="data-table">
                   <thead><tr>{result.columns.map((c: any) => <th key={c.name} title={c.type}>{c.name}</th>)}</tr></thead>

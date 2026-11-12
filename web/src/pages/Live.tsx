@@ -3,6 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { Pause, Play, Square, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, Card, Empty, PageHeader, Status, fieldClass } from "../components/ui";
+import { Orb } from "../components/Orb";
 import { put } from "../lib/api";
 import { usePrefs, useSource } from "../lib/context";
 import { fmtMicros, usOf } from "../lib/format";
@@ -122,7 +123,16 @@ export function LivePage() {
         description={`Runs only while started, and stops by itself after ${settings.live_idle_minutes} minutes.`}
         right={
           <div className="flex flex-wrap items-center gap-2">
-            <span role="status" className="mr-1"><Status tone={streaming ? (connected ? (paused ? "warn" : "good") : "info") : "neutral"}>{streaming ? (connected ? (paused ? "Paused" : "Streaming") : "Connecting") : "Stopped"}</Status></span>
+            <span role="status" className="mr-1 inline-flex items-center gap-2">
+              {streaming && !paused ? (
+                <>
+                  <Orb work={connected ? "stream" : "connect"} label={connected ? "Streaming" : "Connecting"} />
+                  {connected ? "Streaming" : "Connecting"}
+                </>
+              ) : (
+                <Status tone={paused ? "warn" : "neutral"}>{paused ? "Paused" : "Stopped"}</Status>
+              )}
+            </span>
             <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Filter number, node, UA, capture ID" aria-label="Filter dialogs" className={`${fieldClass} h-8 px-2.5 w-[250px] max-w-full`} />
             {streaming ? (
               <>
@@ -140,7 +150,14 @@ export function LivePage() {
       <div className="grid lg:grid-cols-2 gap-3 items-start">
         <Card>
           <div className="overflow-auto h-[calc(100vh-150px)]">
-            {shown.length === 0 ? <Empty>{streaming ? "Waiting for traffic. New dialogs appear within a few seconds." : "Press Start to begin."}</Empty> : (
+            {shown.length === 0 ? (
+              streaming && !paused ? (
+                <div className="flex flex-col items-center gap-3 py-10 text-ink-3">
+                  <Orb work="stream" size={64} label="Waiting for traffic" />
+                  Waiting for traffic. New dialogs appear within a few seconds.
+                </div>
+              ) : <Empty>{streaming ? "Paused." : "Press Start to begin."}</Empty>
+            ) : (
               <table className="data-table text-xs">
                 <thead><tr><th>From</th><th>To</th><th>State</th><th className="num">Msgs</th><th>Last</th><th>Node</th></tr></thead>
                 <tbody>

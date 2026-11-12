@@ -4,6 +4,7 @@ import { Check, CircleCheck, CircleX, Copy, KeyRound, Lock, Pencil, Plus, Trash2
 import { useMemo, useState } from "react";
 import { Badge, Button, Card, Dialog, ErrorNote, Field, KV, Loading, PageHeader, Select, Tabs, Toggle, IconButton, Status, fieldClass, inputClass } from "../components/ui";
 import { del, get, post, put } from "../lib/api";
+import { Busy } from "../components/Orb";
 import { ADMIN_SECTIONS } from "../lib/access";
 import { usePrefs } from "../lib/context";
 import { fmtDateTime } from "../lib/format";
@@ -480,7 +481,7 @@ function SsoHelp() {
       <div className="flex items-center gap-2 mt-1">
         <code className="flex-1 min-w-0 truncate font-mono text-xs">{redirect}</code>
         <Button size="sm" onClick={() => navigator.clipboard?.writeText(redirect)}><Copy size={14} />Copy</Button>
-        <Button size="sm" onClick={() => check.mutate()} disabled={check.isPending}>Check provider</Button>
+        <Button size="sm" onClick={() => check.mutate()} disabled={check.isPending}><Busy active={check.isPending} work="connect">{check.isPending ? "Checking…" : "Check provider"}</Busy></Button>
       </div>
       {check.isSuccess && <p className="mt-2 text-xs text-good">Reached {check.data.issuer}: {check.data.keys} signing {check.data.keys === 1 ? "key" : "keys"} published.</p>}
       {check.isError && <p role="alert" className="mt-2 text-xs text-crit">{(check.error as Error).message}</p>}
@@ -563,7 +564,7 @@ function Storage() {
                 {s.built_in && <Badge>Built in</Badge>}
                 {s.active && <Badge tone="info">In use</Badge>}
                 <div className="flex-1" />
-                <Button onClick={() => test.mutate(s.id)} disabled={test.isPending}>Test connection</Button>
+                <Button onClick={() => test.mutate(s.id)} disabled={test.isPending}><Busy active={test.isPending && test.variables === s.id} work="connect">{test.isPending && test.variables === s.id ? "Testing…" : "Test connection"}</Busy></Button>
                 {!s.active && <Button variant="primary" onClick={() => activate.mutate(s.id)}>Use this storage</Button>}
                 {!s.built_in && <Button onClick={() => { setProblem(""); setEditing({ ...s, password: "" }); }}><Pencil size={14} />Edit</Button>}
                 {!s.built_in && !s.active && <Button onClick={() => confirm(`Remove ${s.name}?`) && remove.mutate(s.id)}><Trash2 size={14} /></Button>}
