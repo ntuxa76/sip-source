@@ -48,7 +48,7 @@ function Admin() {
 
 function Workbench() {
   return (
-    <Suspense fallback={<Loading />}>
+    <Suspense fallback={<Loading page label="Opening the SQL workbench…" />}>
       <WorkbenchPage />
     </Suspense>
   );
@@ -85,11 +85,11 @@ function Gate() {
   }, [client]);
 
   if (state.error) return <div className="p-6 text-crit">Can't reach the server: {(state.error as Error).message}</div>;
-  if (!state.data) return <Loading />;
+  if (!state.data) return <Loading page label="Starting sip-source…" />;
   if (state.data.setup_required) return <SetupPage settings={state.data.settings} tokenRequired={state.data.setup_token_required} />;
   if (me.error && (me.error as ApiError).status === 401) return <LoginPage settings={state.data.settings} sso={state.data.sso} />;
   if (me.error) return <div className="p-6 text-crit">{(me.error as Error).message}</div>;
-  if (!me.data) return <Loading />;
+  if (!me.data) return <Loading page label="Signing in…" work="connect" />;
   return (
     <PrefsProvider me={me.data}>
       <RouterProvider router={router} />

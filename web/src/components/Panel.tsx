@@ -1,6 +1,6 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { ArrowDownRight, ArrowUpRight, Code2, Copy, Download, Info, Loader2, Pencil, Table2, Trash2 } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, Code2, Copy, Download, Info, Pencil, Table2, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { ApiError, get, post, qs } from "../lib/api";
 import type { Call, MetricQuery, TimeSeriesResult } from "../lib/api";
@@ -8,6 +8,7 @@ import { rangeParam, usePrefs, useRange, useSource } from "../lib/context";
 import type { PanelDef } from "../lib/dashboard";
 import { downloadBlob, fmtDateTime, fmtDuration, fmtHMS, formatMetric, metricText } from "../lib/format";
 import { BarList, HeatChart, Histogram, MiniBars, TimeChart } from "./charts";
+import { Orb } from "./Orb";
 import { Card, Dialog, Empty, FindingBadge, Loading, MosCell, RegStatus, StatusChip } from "./ui";
 
 export interface PanelContext {
@@ -158,8 +159,8 @@ function PanelNote({ error }: { error: unknown }) {
   const e = error as ApiError | Error;
   const starting = e instanceof ApiError && e.status === 503 && /starting|few seconds/i.test(e.message);
   return (
-    <div className="flex items-start gap-1.5 text-ink-3 text-xs px-3 py-2.5">
-      {starting ? <Loader2 size={13} className="animate-spin shrink-0 mt-px" aria-hidden /> : <Info size={13} className="shrink-0 mt-px" aria-hidden />}
+    <div className="flex items-start gap-2 text-ink-3 text-xs px-3 py-2.5">
+      {starting ? <Orb work="wait" label="Storage is starting" /> : <Info size={13} className="shrink-0 mt-px" aria-hidden />}
       <span className="line-clamp-3">{starting ? "Storage is starting. Data appears in a few seconds." : e.message}</span>
     </div>
   );

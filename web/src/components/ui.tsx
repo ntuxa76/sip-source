@@ -2,6 +2,7 @@ import { CircleAlert, Info, TriangleAlert, X } from "lucide-react";
 import { useEffect, useId, useRef, type ComponentProps, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { mosVerdict } from "../lib/format";
+import { Orb, useDelayed, type Work } from "./Orb";
 
 /** A bordered panel. With a title it gets a heading row and a hairline under it. */
 export function Card({ title, right, children, className = "" }: { title?: ReactNode; right?: ReactNode; children: ReactNode; className?: string }) {
@@ -220,10 +221,25 @@ export function ErrorNote({ error }: { error: unknown }) {
   );
 }
 
-export function Loading() {
+/**
+ * Work in progress, said in words with an orb that shows what kind of work it is. `page` is the
+ * large form for a whole page; the small one sits inside panels and cards. Nothing shows for the
+ * first 200 ms, so quick loads don't flash.
+ */
+export function Loading({ label = "Loading…", work = "load", page }: { label?: string; work?: Work; page?: boolean }) {
+  const shown = useDelayed(true);
+  if (page) {
+    return (
+      <div role="status" className="flex flex-col items-center justify-center gap-3 min-h-[240px] py-10 text-ink-2">
+        <span className="w-16 h-16">{shown && <Orb work={work} size={64} label={label} />}</span>
+        <span className={shown ? "" : "invisible"}>{label}</span>
+      </div>
+    );
+  }
   return (
-    <div role="status" className="text-ink-3 px-3 py-6">
-      Loading…
+    <div role="status" className="flex items-center gap-2 px-3 py-6 text-ink-3">
+      <span className="w-5 h-5">{shown && <Orb work={work} label={label} />}</span>
+      <span className={shown ? "" : "invisible"}>{label}</span>
     </div>
   );
 }

@@ -8,6 +8,7 @@ import type { PanelContext } from "../components/Panel";
 import { Button, Card, Dialog, Empty, ErrorNote, Field, IconButton, Loading, PageHeader, Select, Tabs, fieldClass, inputClass, popoverClass, useDismiss } from "../components/ui";
 import { del, get, post, put } from "../lib/api";
 import type { MetricInfo } from "../lib/api";
+import { Busy } from "../components/Orb";
 import { homePath } from "../lib/access";
 import { usePrefs, useRange } from "../lib/context";
 import { GRID_COLS, GRID_MARGIN, ROW_HEIGHT, VARIABLE_FIELDS, emptyDashboard, newPanel, nextPanelId, panelHeightPx, parseRefresh } from "../lib/dashboard";
@@ -368,7 +369,7 @@ export function DashboardView({ id }: { id: string }) {
   }, [board, search]);
 
   if (error) return <ErrorNote error={error} />;
-  if (!board) return <Loading />;
+  if (!board) return <Loading page label="Loading dashboard…" />;
 
   const varFilter = board.variables.filter((v) => values[v.name]?.length).map((v) => `${v.field}:${values[v.name].join(",")}`).join(" ");
   const linked = board.sharedCrosshair ?? crosshair;
@@ -395,7 +396,7 @@ export function DashboardView({ id }: { id: string }) {
               <Button onClick={() => { const p = newPanel(draft); update((d) => ({ ...d, panels: [...d.panels, p] })); setPanelEdit(p.id); }}><Plus size={14} />Add panel</Button>
               <Button onClick={() => setDialog("settings")}><Settings2 size={14} />Settings</Button>
               <Button onClick={() => { setDraft(null); setProblem(""); }}>Discard</Button>
-              <Button variant="primary" onClick={() => save.mutate()} disabled={save.isPending}><Save size={14} />Save</Button>
+              <Button variant="primary" onClick={() => save.mutate()} disabled={save.isPending}><Busy active={save.isPending} work="connect" icon={<Save size={14} />} inverse>{save.isPending ? "Saving…" : "Save"}</Busy></Button>
             </div>
           ) : (
             <div className="flex flex-wrap gap-2">
@@ -522,7 +523,7 @@ export function ExplorePage() {
   const metrics: MetricInfo[] = data?.metrics ?? [];
   const current = metrics.find((m) => m.id === metric);
   const panel = useMemo<PanelDef>(() => ({ id: 1, type: "timeseries", title: current?.name ?? "", gridPos: { x: 0, y: 0, w: 24, h: 18 }, query: { mode: "metric", metric, groupBy: dim || undefined, filter: applied || undefined }, options: { viz: viz as PanelDef["options"]["viz"] } }), [current, metric, dim, applied, viz]);
-  if (!data) return <Loading />;
+  if (!data) return <Loading page label="Loading metrics…" />;
 
   return (
     <div>

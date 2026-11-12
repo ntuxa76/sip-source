@@ -2,6 +2,12 @@
 
 Images are published as `ntuxa76/sip-source:<version>`.
 
+## 0.9.1
+
+- Loading indicators are animated orbs whose motion shows the kind of work: loading, searching
+  calls, running SQL, following live traffic, reaching another system, or waiting for storage to
+  start. Each comes with a short label, and nothing appears for loads under 200 ms.
+
 ## 0.9
 
 - The whole database schema, MariaDB and ClickHouse, is one file: [`schema.sql`](schema.sql).

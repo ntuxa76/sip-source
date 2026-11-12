@@ -54,7 +54,7 @@ docker run -d --name sip-source \
   -e SS_DB_HOST=mariadb.example.net \
   -e SS_DB_USER=sip_source \
   -e SS_DB_PASSWORD=change-me \
-  ntuxa76/sip-source:0.9
+  ntuxa76/sip-source:0.9.1
 ```
 
 The service speaks plain HTTP. Put a TLS reverse proxy in front of it for production; see
@@ -83,7 +83,7 @@ An invalid value stops the container at startup with a message naming the variab
 
 - [docs/ENVIRONMENT.md](docs/ENVIRONMENT.md) lists every variable with its default.
 - [.env.example](.env.example) has the same list, ready to copy.
-- `docker run --rm ntuxa76/sip-source:0.9 env` prints the list from the image.
+- `docker run --rm ntuxa76/sip-source:0.9.1 env` prints the list from the image.
 
 Passwords and keys can be read from files with the `_FILE` suffix, for example
 `SS_DB_PASSWORD_FILE=/run/secrets/db_password`.
@@ -175,3 +175,8 @@ cargo run -q -p sip-source -- env --dotenv > .env.example
 
 To change the database schema, edit [schema.sql](schema.sql): change the `@mariadb` part and add the
 same change as a new `@mariadb-upgrade` part, so existing installations are upgraded too.
+
+## Acknowledgements
+
+The loading indicators are [thinking-orbs](https://github.com/Jakubantalik/Libraries.dev) by Jakub
+Antalik, used under the MIT licence.

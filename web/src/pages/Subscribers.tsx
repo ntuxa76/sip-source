@@ -119,7 +119,7 @@ export function SubscriberPage({ number }: { number: string }) {
       </div>
     );
   }
-  if (!data) return <Loading />;
+  if (!data) return <Loading page work="search" label={`Looking up ${number}…`} />;
   const s: RegState = data.state;
   const other = (c: Call) => (c.caller_n === data.number ? c.callee_n : c.caller_n);
   const headline = s.status === "failing" && s.last_failure

@@ -46,7 +46,7 @@ export function CallPage({ uid }: { uid: string }) {
 
   void refreshMs;
   if (error) return <ErrorNote error={error} />;
-  if (!call || !flow.data) return <Loading />;
+  if (!call || !flow.data) return <Loading page work="search" label="Loading the call…" />;
 
   const selMsg = selected !== null ? flow.data.messages.find((m) => m.idx === selected) ?? null : null;
 

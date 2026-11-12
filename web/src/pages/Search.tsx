@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { ArrowDown, ArrowUp, Ban, Bookmark, ChevronDown, ChevronRight, CircleAlert, Columns3, Download, SlidersHorizontal, Trash2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { HistogramStrip } from "../components/charts";
+import { Orb } from "../components/Orb";
 import { Button, CallStateBadge, Card, Empty, ErrorNote, FindingBadge, Loading, MosCell, RegStatus, Select, StatusChip, fieldClass, popoverClass } from "../components/ui";
 import { del, get, post, qs } from "../lib/api";
 import type { Call } from "../lib/api";
@@ -310,7 +311,7 @@ export function SearchPage() {
   const setPage = (n: number) => navigate({ to: "/search", search: (p: any) => ({ ...p, page: n > 0 ? String(n) : undefined }) } as any);
 
   if (error) return <ErrorNote error={error} />;
-  if (!data) return <Loading />;
+  if (!data) return <Loading page work="search" label="Searching calls…" />;
 
   const problems = data.tokens.filter((t: any) => t.error);
   const detected = data.tokens.filter((t: any) => t.detected);
@@ -354,7 +355,7 @@ export function SearchPage() {
           </Card>
         ))}
 
-        <Card title={<span>{data.total.toLocaleString()} calls</span>} right={<span className="tnum">drag to narrow the range · {tz}</span>}>
+        <Card title={<span>{data.total.toLocaleString()} calls</span>} right={<span className="flex items-center gap-2 tnum">{isFetching && <Orb work="search" label="Updating results" />}drag to narrow the range · {tz}</span>}>
           <div className="px-2 pt-2 pb-1.5">
             <HistogramStrip histogram={data.histogram} onZoom={(a, b) => setRange(rangeParam(a), rangeParam(Math.min(b, Date.now())))} />
           </div>
