@@ -260,6 +260,41 @@ fn agent_skewed(app: &App, ips: &BTreeSet<String>) -> bool {
     ips.iter().any(|ip| agents.get(ip).is_some_and(|a| a.clock_offset_ms.abs() > 1000.0))
 }
 
+/// Without a carrier in the topology settings, a peer that never registers and doesn't send
+/// HEP itself is taken to be a trunk or gateway: calls sent to it are outbound, calls from it
+/// inbound. It is named after its software and address, e.g. `Cisco-SIPGateway 192.0.2.7`.
+fn auto_trunk(app: &App, root: &Dialog, egress: &Dialog, src: &str, dst: &str) -> (&'static str, String) {
+    let endpoint = |ip: &str| {
+        ip.is_empty() || app.ingest.registered.lock().unwrap().contains_key(ip) || app.ingest.agents.read().unwrap().contains_key(ip)
+    };
+    let name = |d: &Dialog, ip: &str| {
+        let ua = d.msgs.iter().find(|m| m.src_ip == ip && !m.user_agent.is_empty()).map(|m| m.user_agent.as_str()).unwrap_or("");
+        let product: String = ua.split(['/', ' ']).next().unwrap_or("").chars().take(32).collect();
+        if product.is_empty() { ip.to_string() } else { format!("{product} {ip}") }
+    };
+    if dst != src && !endpoint(dst) {
+        ("outbound", name(egress, dst))
+    } else if !endpoint(src) {
+        ("inbound", name(root, src))
+    } else if endpoint(src) && endpoint(dst) {
+        ("onnet", String::new())
+    } else {
+        ("unknown", String::new())
+    }
+}
+
+/// Learns which addresses register or take registrations, from the last two days, so trunks
+/// are told apart from phones and PBXs right after a restart.
+async fn load_registered(app: &App, ch: &Ch) -> Result<(), String> {
+    let rows = ch.select("SELECT arrayJoin([src_ip, dst_ip]) AS src_ip, toUnixTimestamp64Micro(max(ts)) AS t FROM sip_messages WHERE cseq_method = 'REGISTER' AND is_request AND ts > now64() - INTERVAL 2 DAY GROUP BY src_ip").await?;
+    let mut map = app.ingest.registered.lock().unwrap();
+    for r in rows {
+        let t = r["t"].as_i64().unwrap_or(0);
+        map.entry(s(&r, "src_ip")).and_modify(|v| *v = (*v).max(t)).or_insert(t);
+    }
+    Ok(())
+}
+
 /// Builds one call from its dialogs, earliest first. Returns the row and when to look again.
 fn assemble(app: &App, topo: &Topology, legs: &[&Dialog], qos: &HashMap<String, Qos>, link: &str, now: i64) -> (Value, Option<i64>) {
     let root_dialog = legs[0];
@@ -278,7 +313,7 @@ fn assemble(app: &App, topo: &Topology, legs: &[&Dialog], qos: &HashMap<String, 
         (Some(i), _) if i.carrier => ("inbound", i.name.clone()),
         (_, Some(e)) if e.carrier => ("outbound", e.name.clone()),
         (Some(_), Some(_)) => ("onnet", String::new()),
-        _ => ("unknown", String::new()),
+        _ => auto_trunk(app, root_dialog, egress_dialog, &invite.src_ip, &egress_invite.dst_ip),
     };
 
     // The caller's view wins, but when only the egress leg has answered, use what's known.
@@ -625,6 +660,9 @@ pub async fn run(app: Arc<App>) {
         let ch = app.storage.read().unwrap().clone();
         let Some(ch) = ch else { continue };
         if recovered_for != ch.url {
+            if let Err(e) = load_registered(&app, &ch).await {
+                tracing::warn!("finalizer: can't read registered addresses: {e}");
+            }
             match recover(&app, &ch).await {
                 Ok(()) => recovered_for = ch.url.clone(),
                 Err(e) => tracing::warn!("finalizer recovery failed: {e}"),

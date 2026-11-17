@@ -4,7 +4,7 @@ import { ArrowDown, ArrowUp, Ban, Bookmark, ChevronDown, ChevronRight, CircleAle
 import { useEffect, useRef, useState } from "react";
 import { HistogramStrip } from "../components/charts";
 import { Orb } from "../components/Orb";
-import { Button, CallStateBadge, Card, Empty, ErrorNote, FindingBadge, Loading, MosCell, RegStatus, Select, StatusChip, fieldClass, popoverClass } from "../components/ui";
+import { Button, CallStateBadge, Card, Empty, ErrorNote, FindingBadge, Loading, MosCell, RefreshButton, RegStatus, Select, StatusChip, fieldClass, popoverClass } from "../components/ui";
 import { del, get, post, qs } from "../lib/api";
 import type { Call } from "../lib/api";
 import { rangeParam, usePrefs, useRange, useSource } from "../lib/context";
@@ -299,6 +299,7 @@ export function SearchPage() {
   // On narrow screens the filter panel stays folded until asked for.
   const [showFilters, setShowFilters] = useState(false);
 
+  const client = useQueryClient();
   const { data, error, isFetching } = useQuery({
     queryKey: ["search", q, from, to, pageSize, page, tz, sort, dir, facets.join(","), source],
     queryFn: () => get(`/calls/search${qs({ q, from: from, to, tz, limit: pageSize, offset: page * pageSize, sort, dir, facets: facets.join(","), source: source || undefined })}`),
@@ -355,7 +356,7 @@ export function SearchPage() {
           </Card>
         ))}
 
-        <Card title={<span>{data.total.toLocaleString()} calls</span>} right={<span className="flex items-center gap-2 tnum">{isFetching && <Orb work="search" label="Updating results" />}drag to narrow the range · {tz}</span>}>
+        <Card title={<span>{data.total.toLocaleString()} calls</span>} right={<span className="flex items-center gap-2 tnum">{isFetching && <Orb work="search" label="Updating results" />}drag to narrow the range · {tz}<RefreshButton compact label="Refresh results" busy={isFetching} onClick={() => client.refetchQueries({ queryKey: ["search"], type: "active" })} /></span>}>
           <div className="px-2 pt-2 pb-1.5">
             <HistogramStrip histogram={data.histogram} onZoom={(a, b) => setRange(rangeParam(a), rangeParam(Math.min(b, Date.now())))} />
           </div>

@@ -9,10 +9,39 @@ const GAP_THRESHOLD_US = 5_000_000;
 
 const LEG_COLOR: Record<string, string> = { A: "var(--leg-a)", B: "var(--leg-b)" };
 
-function lineColor(m: Msg): string {
-  if (m.class === "client_error") return "var(--ladder-warn)";
-  if (m.class === "server_error") return "var(--ladder-crit)";
+/** One colour per kind of message, so a ladder reads at a glance. Requests keep their leg's colour. */
+export function msgColor(m: Msg): string {
+  if (m.status >= 500) return "var(--ladder-crit)";
+  if (m.status >= 400) return "var(--ladder-warn)";
+  if (m.status >= 300) return "var(--ladder-redirect)";
+  if (m.status >= 200) return "var(--ladder-ok)";
+  if (m.status >= 100) return "var(--ladder-prov)";
+  if (m.method === "BYE" || m.method === "CANCEL") return "var(--ladder-end)";
   return LEG_COLOR[m.leg];
+}
+
+export const LADDER_LEGEND: [string, string][] = [
+  ["var(--leg-a)", "Request"],
+  ["var(--ladder-prov)", "1xx"],
+  ["var(--ladder-ok)", "2xx"],
+  ["var(--ladder-redirect)", "3xx"],
+  ["var(--ladder-warn)", "4xx"],
+  ["var(--ladder-crit)", "5xx / 6xx"],
+  ["var(--ladder-end)", "BYE / CANCEL"],
+];
+
+/** Times of the call's phases, in microseconds, for the bar beside the times. */
+export interface Phases {
+  ring: number | null;
+  answer: number | null;
+  end: number | null;
+}
+
+function phaseOf(us: number, p: Phases): [string, string] {
+  if (p.end !== null && us >= p.end) return ["var(--line-2)", "ended"];
+  if (p.answer !== null && us >= p.answer) return ["var(--phase-talk)", "talking"];
+  if (p.ring !== null && us >= p.ring) return ["var(--phase-ring)", "ringing"];
+  return ["var(--phase-setup)", "setting up"];
 }
 
 type Row = { kind: "msg"; m: Msg; y: number } | { kind: "gap"; seconds: number; y: number };
@@ -43,9 +72,10 @@ export interface LadderProps {
   timeMode: "absolute" | "delta";
   svgRef?: React.Ref<SVGSVGElement>;
   scrub?: (s: string) => string;
+  phases?: Phases;
 }
 
-export function Ladder({ columns, messages, selected, onSelect, tz, timeMode, svgRef, scrub = (s) => s }: LadderProps) {
+export function Ladder({ columns, messages, selected, onSelect, tz, timeMode, svgRef, scrub = (s) => s, phases }: LadderProps) {
   const box = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(900);
 
@@ -60,6 +90,16 @@ export function Ladder({ columns, messages, selected, onSelect, tz, timeMode, sv
   const colW = (width - TIME_W) / columns.length;
   const x = (i: number) => TIME_W + colW * (i + 0.5);
   const firstUs = messages.length ? usOf(messages[0].ts) : 0;
+  // The software each host announces in User-Agent or Server.
+  const software = useMemo(() => {
+    const out: Record<number, string> = {};
+    for (const m of messages) {
+      if (out[m.src] !== undefined) continue;
+      const h = m.headers.find(([k]) => k.toLowerCase() === "user-agent" || k.toLowerCase() === "server");
+      if (h) out[m.src] = h[1];
+    }
+    return out;
+  }, [messages]);
 
   let prevUs = firstUs;
   return (
@@ -68,16 +108,19 @@ export function Ladder({ columns, messages, selected, onSelect, tz, timeMode, sv
         <div style={{ width: TIME_W }} className="shrink-0 px-2 py-1.5 text-ink-3 text-xs self-end">
           {timeMode === "absolute" ? `Time (${tz})` : "Delta"}
         </div>
-        {columns.map((c) => (
-          <div key={c.name} style={{ width: colW }} className="text-center py-1.5 px-1 min-w-0">
-            <div className="font-semibold text-[13px] truncate">{scrub(c.name)}</div>
-            <div className="text-ink-3 text-xs font-mono truncate">{c.ip}{c.capture_id ? ` · capture ${c.capture_id}` : ""}</div>
+        {columns.map((c, i) => (
+          <div key={c.name} style={{ width: colW }} className="py-1.5 px-1.5 min-w-0">
+            <div className={`ladder-node ${c.role === "capture" ? "ladder-node-capture" : ""}`} title={software[i] ?? ""}>
+              <div className="font-semibold text-[13px] truncate">{scrub(c.name)}</div>
+              <div className="text-ink-3 text-xs font-mono truncate">{c.ip}{c.capture_id ? ` · capture ${c.capture_id}` : ""}</div>
+              {software[i] && <div className="text-ink-2 text-2xs truncate">{software[i]}</div>}
+            </div>
           </div>
         ))}
       </div>
       <svg ref={svgRef} width={width} height={height} className="block select-none" role="list" aria-label="SIP message flow">
         {columns.map((c, i) => (
-          <line key={c.name} x1={x(i)} x2={x(i)} y1={0} y2={height} stroke="var(--line-2)" strokeWidth={1} />
+          <line key={c.name} x1={x(i)} x2={x(i)} y1={0} y2={height} stroke="var(--line-2)" strokeWidth={1.5} strokeDasharray="2 3" />
         ))}
         {rows.map((r) => {
           if (r.kind === "gap") {
@@ -97,11 +140,13 @@ export function Ladder({ columns, messages, selected, onSelect, tz, timeMode, sv
           const [x1, x2] = [x(m.src), x(m.dst)];
           const dir = x2 > x1 ? 1 : -1;
           const y = r.y + ROW - 7;
-          const color = lineColor(m);
+          const color = msgColor(m);
           const mid = (x1 + x2) / 2;
           const isSel = selected === m.idx;
           const faded = m.class === "provisional";
-          const label = [m.label, m.cseq_method && m.status > 0 ? `(${m.cseq_method})` : "", m.has_sdp ? "· SDP" : "", m.retx ? `· retx ${m.retx}` : "", m.captures.length > 1 ? `· ×${m.captures.length}` : ""].filter(Boolean).join(" ");
+          const label = [m.label, m.cseq_method && m.status > 0 ? `(${m.cseq_method})` : "", m.retx ? `· retx ${m.retx}` : "", m.captures.length > 1 ? `· ×${m.captures.length}` : ""].filter(Boolean).join(" ");
+          const labelW = Math.min(Math.abs(x2 - x1) - 16, label.length * 6.6 + (m.has_sdp ? 34 : 14));
+          const phase = phases ? phaseOf(us, phases) : null;
           return (
             <g
               key={m.idx}
@@ -113,16 +158,27 @@ export function Ladder({ columns, messages, selected, onSelect, tz, timeMode, sv
                 if (e.key === "Enter") onSelect(m.idx);
               }}
               className="cursor-pointer ladder-row"
+              style={{ "--row-delay": `${Math.min(r.y / ROW, 40) * 18}ms` } as React.CSSProperties}
             >
               <rect x={0} y={r.y} width={width} height={ROW} fill={isSel ? "var(--accent-wash)" : "transparent"} className="ladder-hit" />
-              <text x={8} y={r.y + 18} fontSize={11} fill="var(--ink-2)" fontFamily="var(--font-mono)">
+              {phase && (
+                <rect x={0} y={r.y} width={3} height={ROW} fill={phase[0]}>
+                  <title>{phase[1]}</title>
+                </rect>
+              )}
+              <text x={10} y={r.y + 18} fontSize={11} fill="var(--ink-2)" fontFamily="var(--font-mono)">
                 {timeMode === "absolute" ? fmtMicros(m.ts, tz).slice(0, 15) : fmtDelta(delta)}
               </text>
-              <line x1={x1} x2={x2 - dir * 7} y1={y} y2={y} stroke={color} strokeWidth={m.class === "request" || m.class === "success" ? 1.75 : 1.25} strokeDasharray={m.retx ? "4 3" : undefined} opacity={faded ? 0.6 : 1} />
-              <polygon points={`${x2},${y} ${x2 - dir * 8},${y - 3.75} ${x2 - dir * 8},${y + 3.75}`} fill={color} opacity={faded ? 0.6 : 1} />
-              <text x={mid} y={y - 4.5} textAnchor="middle" fontSize={11.5} fontWeight={m.class === "request" || m.status >= 200 ? 500 : 400} fill="var(--ink)" stroke={isSel ? "var(--accent-wash)" : "var(--surface)"} strokeWidth={3} paintOrder="stroke">
+              <line className="ladder-arrow" x1={x1} x2={x2 - dir * 7} y1={y} y2={y} stroke={color} strokeWidth={m.class === "request" || m.class === "success" || m.status >= 300 ? 2 : 1.5} strokeDasharray={m.retx ? "4 3" : undefined} opacity={faded ? 0.75 : 1} />
+              <polygon className="ladder-head" points={`${x2},${y} ${x2 - dir * 9},${y - 4.5} ${x2 - dir * 9},${y + 4.5}`} fill={color} opacity={faded ? 0.75 : 1} />
+              <circle cx={x1} cy={y} r={2.5} fill={color} opacity={faded ? 0.75 : 1} />
+              {labelW > 20 && <rect x={mid - labelW / 2} y={y - 17} width={labelW} height={15} rx={7.5} fill={`color-mix(in srgb, ${color} ${isSel ? 26 : 15}%, var(--surface))`} stroke={`color-mix(in srgb, ${color} 40%, transparent)`} strokeWidth={0.75} />}
+              <text x={mid - (m.has_sdp ? 10 : 0)} y={y - 5.5} textAnchor="middle" fontSize={11.5} fontWeight={m.class === "request" || m.status >= 200 ? 600 : 400} fill="var(--ink)">
                 {label}
               </text>
+              {m.has_sdp && labelW > 40 && (
+                <text x={mid + labelW / 2 - 13} y={y - 5.5} textAnchor="middle" fontSize={9} fontWeight={700} fill={color}>SDP</text>
+              )}
             </g>
           );
         })}

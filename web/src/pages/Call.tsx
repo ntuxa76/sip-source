@@ -5,7 +5,8 @@ import { Copy, Download, FileText, X } from "lucide-react";
 import * as echarts from "echarts/core";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FONT, chrome, escapeHtml, streamColors, tooltipChrome, useEChart } from "../components/charts";
-import { Ladder } from "../components/Ladder";
+import { CallPath } from "../components/CallPath";
+import { LADDER_LEGEND, Ladder } from "../components/Ladder";
 import { Badge, Button, CallStateBadge, IconButton, Card, Empty, ErrorNote, FindingBadge, KV, Loading, MosCell, RegStatus, SeverityBadge, StatusChip, Tabs, Toggle } from "../components/ui";
 import { get } from "../lib/api";
 import type { Call, Flow, Msg } from "../lib/api";
@@ -16,6 +17,7 @@ echarts.use([LineChart]);
 
 const TABS = [
   { id: "flow", label: "Flow" },
+  { id: "path", label: "Path" },
   { id: "timeline", label: "Timeline" },
   { id: "messages", label: "Messages" },
   { id: "media", label: "Media" },
@@ -59,6 +61,7 @@ export function CallPage({ uid }: { uid: string }) {
         </div>
         <div className="p-3">
           {tab === "flow" && <FlowTab flow={flow.data} selected={selected} onSelect={openMsg} tz={tz} scrub={scrub} call={call} />}
+          {tab === "path" && <CallPath flow={flow.data} call={call} scrub={scrub} />}
           {tab === "timeline" && <TimelineTab call={call} flow={flow.data} tz={tz} />}
           {tab === "messages" && <MessagesTab flow={flow.data} tz={tz} onSelect={openMsg} scrub={scrub} />}
           {tab === "media" && <MediaTab uid={uid} tz={tz} sub={sub} />}
@@ -83,11 +86,22 @@ function Copyable({ value }: { value: string }) {
   );
 }
 
+const STATE_COLOR: Record<string, string> = {
+  completed: "var(--good)",
+  answered: "var(--good)",
+  failed: "var(--crit)",
+  timeout: "var(--crit)",
+  cancelled: "var(--ink-3)",
+  ringing: "var(--phase-ring)",
+  setup: "var(--info)",
+};
+
 function Summary({ call: c, tz, scrub }: { call: Call; tz: string; scrub: (s: string) => string }) {
   const crit = ["caller", "callee"] as const;
+  const color = STATE_COLOR[c.state] ?? "var(--info)";
   return (
-    <Card>
-      <div className="p-3">
+    <Card className="call-summary" >
+      <div className="p-3 border-l-4 rounded-l-lg" style={{ borderLeftColor: color, background: `linear-gradient(90deg, color-mix(in srgb, ${color} 9%, var(--surface)), var(--surface) 55%)` }}>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
           <h1 className="text-md font-semibold font-mono">
             {scrub(c.caller_n)} <span className="text-ink-3 font-sans">→</span> {scrub(c.callee_n)}
@@ -107,10 +121,10 @@ function Summary({ call: c, tz, scrub }: { call: Call; tz: string; scrub: (s: st
           {c.hangup_side !== "unknown" && c.end_cause ? `, ${c.hangup_side} side` : ""}
         </div>
         <div className="grid grid-cols-3 md:grid-cols-6 xl:grid-cols-9 gap-x-4 gap-y-2.5 mt-3">
-          <KV label="PDD">{fmtDuration(c.pdd_ms)}</KV>
+          <KV label="PDD"><span className={c.findings.includes("HIGH_PDD") ? "text-warn font-semibold" : ""}>{fmtDuration(c.pdd_ms)}</span></KV>
           <KV label="Setup">{fmtDuration(c.setup_ms)}</KV>
           <KV label="Talk">{c.answer_ts ? fmtDuration(c.talk_ms) : "–"}</KV>
-          <KV label="Egress status">{c.egress_status || "–"}{c.q850_cause > 0 ? ` · Q.850 ${c.q850_cause}` : ""}</KV>
+          <KV label="Egress status"><span style={{ color: c.egress_status >= 500 ? "var(--crit)" : c.egress_status >= 400 ? "var(--warn)" : c.egress_status >= 200 ? "var(--good)" : undefined }} className="font-semibold">{c.egress_status || "–"}</span>{c.q850_cause > 0 ? ` · Q.850 ${c.q850_cause}` : ""}</KV>
           <KV label="Worst MOS"><MosCell mos={c.min_mos} /></KV>
           <KV label="Codecs">{c.codecs.join(", ") || "–"}</KV>
           <KV label="Legs">{c.b_call_id ? 2 : 1}</KV>
@@ -179,7 +193,25 @@ function FlowTab({ flow, selected, onSelect, tz, scrub, call }: { flow: Flow; se
         <Button onClick={() => setTimeMode(timeMode === "absolute" ? "delta" : "absolute")}>{timeMode === "absolute" ? "Show deltas" : "Show times"}</Button>
         <Button onClick={exportSvg}><Download size={14} />SVG</Button>
       </div>
-      <Ladder columns={flow.columns} messages={visible} selected={selected} onSelect={onSelect} tz={tz} timeMode={timeMode} svgRef={svg} scrub={scrub} />
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-2 text-xs text-ink-2" aria-label="Colours">
+        {LADDER_LEGEND.map(([c, l]) => (
+          <span key={l} className="inline-flex items-center gap-1.5"><i className="inline-block w-3.5 h-[3px] rounded-full" style={{ background: c }} />{l}</span>
+        ))}
+        <span className="inline-flex items-center gap-1.5 ml-2"><i className="inline-block w-[3px] h-3 rounded-sm" style={{ background: "var(--phase-setup)" }} />setup</span>
+        <span className="inline-flex items-center gap-1.5"><i className="inline-block w-[3px] h-3 rounded-sm" style={{ background: "var(--phase-ring)" }} />ringing</span>
+        <span className="inline-flex items-center gap-1.5"><i className="inline-block w-[3px] h-3 rounded-sm" style={{ background: "var(--phase-talk)" }} />talking</span>
+      </div>
+      <Ladder
+        columns={flow.columns}
+        messages={visible}
+        selected={selected}
+        onSelect={onSelect}
+        tz={tz}
+        timeMode={timeMode}
+        svgRef={svg}
+        scrub={scrub}
+        phases={{ ring: call.ring_ts ? usOf(call.ring_ts) : null, answer: call.answer_ts ? usOf(call.answer_ts) : null, end: call.end_ts ? usOf(call.end_ts) : null }}
+      />
     </div>
   );
 }

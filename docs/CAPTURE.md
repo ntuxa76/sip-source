@@ -68,6 +68,13 @@ those calls are marked `inferred`.
 
 ## Direction and trunks
 
-Under **Admin → Settings → Topology**, list your carriers and subscriber networks as `Name=CIDR`
-pairs, for example `CarrierX=203.0.113.0/24`. Calls then get a direction (inbound, outbound, on-net)
-and a trunk. Until this is set, direction shows as `unknown` and trunk charts stay empty.
+Without any setup, sip-source finds trunks by itself: a device that takes or sends calls but never
+registers, and never takes registrations, is treated as a trunk or gateway. Calls sent to it are
+outbound, calls from it inbound, and it is named after its software and address, for example
+`Cisco-SIPGateway 192.0.2.7`. Phones, PBXs and registrars are recognised from the registrations
+they send or receive, and HEP senders are never taken for trunks.
+
+To choose the names and ranges yourself, list your carriers and subscriber networks under
+**Admin → Settings → Topology** as `Name=CIDR` pairs, for example `CarrierX=203.0.113.0/24`. A
+listed carrier always wins over the automatic choice. Calls are classified when they are stored,
+so a change applies to new calls.

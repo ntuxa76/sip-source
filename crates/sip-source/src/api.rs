@@ -51,6 +51,8 @@ pub struct App {
     pub local: crate::local::Engine,
     pub ingest: Ingest,
     pub live_sessions: AtomicUsize,
+    /// Hours of history the anomaly detector has learned from.
+    pub anomaly_learned_hours: AtomicUsize,
 }
 
 type S = State<Arc<App>>;
@@ -170,6 +172,7 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/registrations/now", get(registered_now))
         .route("/registrations/failing", get(failing))
         .route("/live", get(live))
+        .route("/anomalies", get(crate::anomaly::list))
         .route("/queries/schema", get(schema))
         .route("/queries/library", get(library))
         .route("/queries/run", post(run_query))
@@ -940,11 +943,14 @@ async fn live(State(a): S, user: User) -> Response {
     let keep = (!user.can("unmask_numbers")).then(|| a.settings.int("mask_keep_digits") as usize);
     let rx = a.ingest.live.subscribe();
     let slot = LiveSlot(a.clone());
-    let stream = futures_util::stream::unfold((rx, slot), move |(mut rx, slot)| async move {
+    let stream = futures_util::stream::unfold((rx, slot, true), move |(mut rx, slot, first)| async move {
         if Instant::now() >= deadline {
             return None;
         }
-        tokio::time::sleep(tick).await;
+        // The first, empty batch goes out at once so the browser knows the stream is open.
+        if !first {
+            tokio::time::sleep(tick).await;
+        }
         let mut out: Vec<String> = Vec::new();
         loop {
             match rx.try_recv() {
@@ -956,9 +962,13 @@ async fn live(State(a): S, user: User) -> Response {
                 Err(_) => break,
             }
         }
-        Some((Ok::<Event, Infallible>(Event::default().data(format!("[{}]", out.join(",")))), (rx, slot)))
+        Some((Ok::<Event, Infallible>(Event::default().data(format!("[{}]", out.join(",")))), (rx, slot, false)))
     });
-    Sse::new(stream).keep_alive(KeepAlive::default()).into_response()
+    let mut res = Sse::new(stream).keep_alive(KeepAlive::default()).into_response();
+    // Reverse proxies such as nginx otherwise hold the stream back in their buffers.
+    res.headers_mut().insert("x-accel-buffering", axum::http::HeaderValue::from_static("no"));
+    res.headers_mut().insert(axum::http::header::CACHE_CONTROL, axum::http::HeaderValue::from_static("no-cache"));
+    res
 }
 
 fn mask_live(event: &str, keep: usize) -> String {

@@ -23,6 +23,7 @@ interface LiveEvent {
   ua: string;
   capture_id: number;
   agent_ip: string;
+  cseq_method: string;
 }
 
 interface Dialog {
@@ -37,6 +38,20 @@ interface Dialog {
 }
 
 const MAX_DIALOGS = 200;
+/** A phone's re-registrations share one Call-ID for hours, so each row keeps only its latest messages. */
+const MAX_EVENTS = 300;
+/** Keep-alives, registrations and presence: thousands an hour on a real network, and not calls. */
+const BACKGROUND = new Set(["OPTIONS", "REGISTER", "NOTIFY", "SUBSCRIBE", "PUBLISH", "MESSAGE"]);
+
+/** The state is the last method (lower case) or status code seen on the dialog. */
+function liveTone(state: string): "good" | "warn" | "crit" | "info" | "neutral" {
+  const code = Number(state);
+  if (!code) return state === "bye" || state === "cancel" ? "neutral" : "info";
+  if (code >= 500) return "crit";
+  if (code >= 400) return "warn";
+  if (code >= 200) return "good";
+  return "info";
+}
 
 export function LivePage() {
   const { tz, settings, can } = usePrefs();
@@ -53,6 +68,12 @@ export function LivePage() {
   const [filter, setFilter] = useState("");
   const [connected, setConnected] = useState(false);
   const [note, setNote] = useState("");
+  const [showAll, setShowAll] = useState(false);
+  const showAllRef = useRef(showAll);
+  showAllRef.current = showAll;
+  // Bumped to reconnect after the connection drops for a reason other than the time limit.
+  const [attempt, setAttempt] = useState(0);
+  const startedAt = useRef(0);
 
   const enable = useMutation({
     mutationFn: () => put("/settings/live_enabled", { value: "true" }),
@@ -62,36 +83,54 @@ export function LivePage() {
 
   useEffect(() => {
     if (!streaming) return;
+    if (attempt === 0) startedAt.current = Date.now();
     const es = new EventSource("/api/v1/live");
+    let retry: ReturnType<typeof setTimeout> | undefined;
     es.onopen = () => {
       setConnected(true);
       setNote("");
     };
     es.onerror = () => {
-      // The browser would reconnect forever; a stopped stream should stay stopped.
+      // The browser would reconnect forever; reconnect ourselves only while within the time limit.
       es.close();
       setConnected(false);
-      setStreaming(false);
-      setNote("The stream ended. It stops by itself after a time limit, and there is a limit on streams running at once.");
+      const limitMs = Number(settings.live_idle_minutes) * 60_000;
+      if (Date.now() - startedAt.current < limitMs - 5_000 && attempt < 20) {
+        setNote("Connection lost, reconnecting…");
+        retry = setTimeout(() => setAttempt((n) => n + 1), Math.min(1000 * 2 ** Math.min(attempt, 4), 15_000));
+      } else {
+        setStreaming(false);
+        setAttempt(0);
+        setNote(`The stream stopped after ${settings.live_idle_minutes} minutes. Press Start to watch again.`);
+      }
     };
     es.onmessage = (e) => {
+      if (attempt > 0) setAttempt(0);
       if (pausedRef.current) return;
-      const events: LiveEvent[] = (JSON.parse(e.data) as LiveEvent[]).filter((ev) => !sourceRef.current || ev.agent_ip === sourceRef.current);
+      const events: LiveEvent[] = (JSON.parse(e.data) as LiveEvent[]).filter(
+        (ev) => ev && (!sourceRef.current || ev.agent_ip === sourceRef.current) && (showAllRef.current || !BACKGROUND.has(ev.cseq_method)),
+      );
       if (events.length === 0) return;
       setDialogs((prev) => {
         const map = new Map(prev.map((d) => [d.id, d]));
-        for (const ev of events) {
-          const d = map.get(ev.call_id) ?? { id: ev.call_id, caller: ev.caller, callee: ev.callee, state: ev.state, node: ev.node, ua: ev.ua, last: 0, events: [] };
-          map.set(ev.call_id, { ...d, state: ev.state, last: usOf(ev.ts), events: [...d.events, ev] });
+        const added = new Map<string, LiveEvent[]>();
+        for (const ev of events) added.set(ev.call_id, [...(added.get(ev.call_id) ?? []), ev]);
+        for (const [id, evs] of added) {
+          const first = evs[0];
+          const last = evs[evs.length - 1];
+          const d = map.get(id) ?? { id, caller: first.caller, callee: first.callee, state: first.state, node: first.node, ua: first.ua, last: 0, events: [] };
+          map.set(id, { ...d, state: last.state, last: usOf(last.ts), events: [...d.events, ...evs].slice(-MAX_EVENTS) });
         }
         return [...map.values()].sort((a, b) => b.last - a.last).slice(0, MAX_DIALOGS);
       });
     };
     return () => {
+      clearTimeout(retry);
       es.close();
       setConnected(false);
     };
-  }, [streaming]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [streaming, attempt]);
 
   const shown = useMemo(() => {
     const f = filter.trim().toLowerCase();
@@ -133,14 +172,18 @@ export function LivePage() {
                 <Status tone={paused ? "warn" : "neutral"}>{paused ? "Paused" : "Stopped"}</Status>
               )}
             </span>
+            <label className="inline-flex items-center gap-1.5 text-ink-2 cursor-pointer" title="OPTIONS, REGISTER, NOTIFY, SUBSCRIBE, PUBLISH and MESSAGE">
+              <input type="checkbox" checked={showAll} onChange={(e) => setShowAll(e.target.checked)} />
+              Non-call messages
+            </label>
             <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Filter number, node, UA, capture ID" aria-label="Filter dialogs" className={`${fieldClass} h-8 px-2.5 w-[250px] max-w-full`} />
             {streaming ? (
               <>
                 <Button onClick={() => setPaused(!paused)}>{paused ? <Play size={14} /> : <Pause size={14} />}{paused ? "Resume" : "Pause"}</Button>
-                <Button onClick={() => { setStreaming(false); setPaused(false); }}><Square size={14} />Stop</Button>
+                <Button onClick={() => { setStreaming(false); setPaused(false); setAttempt(0); }}><Square size={14} />Stop</Button>
               </>
             ) : (
-              <Button variant="primary" onClick={() => setStreaming(true)}><Play size={14} />Start</Button>
+              <Button variant="primary" onClick={() => { setAttempt(0); setNote(""); setStreaming(true); }}><Play size={14} />Start</Button>
             )}
             <Button onClick={() => { setDialogs([]); setSelected(null); }}><Trash2 size={14} />Clear</Button>
           </div>
@@ -165,7 +208,7 @@ export function LivePage() {
                     <tr key={d.id} className="cursor-pointer" aria-selected={selected === d.id} onClick={() => setSelected(d.id)}>
                       <td className="font-mono">{d.caller}</td>
                       <td className="font-mono">{d.callee}</td>
-                      <td><Status tone={d.state === "answered" ? "good" : d.state === "failed" || d.state === "timeout" ? "crit" : "info"}>{d.state}</Status></td>
+                      <td><Status tone={liveTone(d.state)} live={/^(invite|1\d\d)$/.test(d.state)}>{d.state}</Status></td>
                       <td className="num">{d.events.length}</td>
                       <td>{d.events[d.events.length - 1].label}</td>
                       <td className="text-ink-2">{d.node}</td>

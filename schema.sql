@@ -156,6 +156,24 @@ CREATE TABLE sso_logins (
     created_at DATETIME(6) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- Traffic that was out of line with what is normal for that hour, found every five minutes.
+CREATE TABLE anomalies (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    dim VARCHAR(16) NOT NULL,
+    dim_value VARCHAR(255) NOT NULL,
+    metric VARCHAR(32) NOT NULL,
+    direction VARCHAR(8) NOT NULL,
+    severity VARCHAR(16) NOT NULL,
+    current_value DOUBLE NOT NULL,
+    baseline DOUBLE NOT NULL,
+    worst_value DOUBLE NOT NULL,
+    started_at DATETIME(6) NOT NULL,
+    last_seen DATETIME(6) NOT NULL,
+    resolved_at DATETIME(6) NULL,
+    details LONGTEXT NOT NULL,
+    KEY idx_anomalies_open (resolved_at, started_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 
 -- @mariadb-upgrade 2
 -- Removes the demo storage and alert acknowledgements, adds capture agents.
@@ -202,6 +220,28 @@ ALTER TABLE users
     ADD COLUMN auth_source VARCHAR(16) NOT NULL DEFAULT 'local' AFTER password_hash,
     ADD COLUMN external_id VARCHAR(255) NULL AFTER auth_source,
     ADD UNIQUE KEY uq_users_external (external_id);
+
+
+-- @mariadb-upgrade 5
+-- Anomalies found by comparing traffic with learned baselines.
+
+-- Traffic that was out of line with what is normal for that hour, found every five minutes.
+CREATE TABLE anomalies (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    dim VARCHAR(16) NOT NULL,
+    dim_value VARCHAR(255) NOT NULL,
+    metric VARCHAR(32) NOT NULL,
+    direction VARCHAR(8) NOT NULL,
+    severity VARCHAR(16) NOT NULL,
+    current_value DOUBLE NOT NULL,
+    baseline DOUBLE NOT NULL,
+    worst_value DOUBLE NOT NULL,
+    started_at DATETIME(6) NOT NULL,
+    last_seen DATETIME(6) NOT NULL,
+    resolved_at DATETIME(6) NULL,
+    details LONGTEXT NOT NULL,
+    KEY idx_anomalies_open (resolved_at, started_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 
 -- @clickhouse

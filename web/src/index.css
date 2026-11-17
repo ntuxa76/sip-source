@@ -385,6 +385,10 @@ input[type="radio"] {
   --leg-b: #6250d6;
   --ladder-warn: #b97c00;
   --ladder-crit: #d03b3b;
+  --ladder-ok: #1f8a4c;
+  --ladder-prov: #3a8f9e;
+  --ladder-redirect: #8b5cc4;
+  --ladder-end: #c2611b;
   --phase-setup: #cdd3da;
   --phase-ring: #f0c665;
   --phase-talk: #7fd0a2;
@@ -396,9 +400,53 @@ input[type="radio"] {
   --leg-b: #9085e9;
   --ladder-warn: #eda100;
   --ladder-crit: #e66767;
+  --ladder-ok: #4fc27f;
+  --ladder-prov: #5fb8c6;
+  --ladder-redirect: #b18cf0;
+  --ladder-end: #ef9152;
   --phase-setup: #9aa2ad;
   --phase-ring: #e0b04a;
   --phase-talk: #58b985;
+}
+
+.ladder-node {
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--line-2);
+  border-radius: var(--radius-lg);
+  background: var(--raised);
+  padding: 4px 6px;
+  text-align: center;
+}
+
+.ladder-node-capture {
+  border-top-color: var(--accent);
+}
+
+/* Each arrow draws from its sender to its receiver as the ladder opens, row by row. */
+.ladder-arrow {
+  stroke-dasharray: 1200;
+  stroke-dashoffset: 1200;
+  animation: ladder-draw 420ms cubic-bezier(0.3, 0.7, 0.3, 1) var(--row-delay, 0ms) forwards;
+}
+
+.ladder-arrow[stroke-dasharray="4 3"] {
+  stroke-dasharray: 4 3;
+  stroke-dashoffset: 0;
+  animation: none;
+}
+
+.ladder-row .ladder-head,
+.ladder-row text,
+.ladder-row circle,
+.ladder-row rect:not(.ladder-hit) {
+  animation: fade-in 260ms ease-out both;
+  animation-delay: calc(var(--row-delay, 0ms) + 160ms);
+}
+
+@keyframes ladder-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
 }
 
 .ladder-row:hover .ladder-hit {
@@ -422,4 +470,180 @@ input[type="radio"] {
   background: var(--accent);
   opacity: 0.12;
   border-radius: 4px;
+}
+
+/* Motion. Short and soft: pages and cards rise in, controls respond to the pointer, live things
+   breathe. Everything here is switched off by the reduced-motion rule above. */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-3px) scale(0.98);
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 45%, transparent);
+  }
+  70% {
+    box-shadow: 0 0 0 6px transparent;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+@keyframes flash {
+  0% {
+    background: var(--accent-wash);
+  }
+}
+
+@keyframes logo-turn {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.page-enter {
+  animation: rise-in 280ms cubic-bezier(0.2, 0.7, 0.3, 1) both;
+}
+
+/* Cards on a page follow each other in. */
+.page-enter section {
+  animation: rise-in 360ms cubic-bezier(0.2, 0.7, 0.3, 1) both;
+}
+
+.page-enter section:nth-of-type(2) {
+  animation-delay: 40ms;
+}
+
+.page-enter section:nth-of-type(3) {
+  animation-delay: 80ms;
+}
+
+.page-enter section:nth-of-type(4) {
+  animation-delay: 120ms;
+}
+
+.page-enter section:nth-of-type(n + 5) {
+  animation-delay: 160ms;
+}
+
+/* Grid items are placed with transforms, so they only fade; the panel inside may rise. */
+.page-enter .react-grid-item {
+  animation: fade-in 420ms ease-out both;
+}
+
+section {
+  transition: border-color 160ms ease, box-shadow 200ms ease;
+}
+
+section:hover {
+  border-color: var(--line-2);
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  transition-property: color, background-color, border-color, box-shadow, transform, opacity;
+  transition-duration: 140ms;
+  transition-timing-function: ease;
+}
+
+button:not(:disabled):active {
+  transform: translateY(1px) scale(0.985);
+}
+
+.shadow-pop,
+[role="dialog"],
+[role="listbox"],
+[role="menu"] {
+  animation: pop-in 140ms ease-out both;
+}
+
+.data-table tbody tr {
+  transition: background-color 120ms ease;
+}
+
+.data-table tbody tr {
+  animation: fade-in 240ms ease-out both;
+}
+
+/* Something that is happening now: a ring that keeps expanding from the dot. */
+.pulse {
+  animation: pulse-ring 1.8s ease-out infinite;
+}
+
+.spin {
+  animation: spin 0.9s linear infinite;
+}
+
+.flash {
+  animation: flash 900ms ease-out;
+}
+
+.logo-spin {
+  animation: logo-turn 600ms cubic-bezier(0.3, 0.7, 0.3, 1);
+}
+
+.logo-link:hover img {
+  transform: rotate(-8deg) scale(1.06);
+  transition: transform 200ms ease;
+}
+
+aside nav a[aria-current="page"] svg {
+  animation: pop-in 220ms ease-out;
+}
+
+/* The call path: devices appear one after the other, the links flow towards the callee. */
+.path-step {
+  animation: rise-in 360ms cubic-bezier(0.2, 0.7, 0.3, 1) both;
+}
+
+.path-flow {
+  background-image: linear-gradient(90deg, transparent 0 40%, color-mix(in srgb, var(--surface) 70%, transparent) 50%, transparent 60% 100%) !important;
+  background-size: 220% 100%;
+  animation: path-flow 2.4s linear infinite;
+}
+
+@keyframes path-flow {
+  from {
+    background-position: 110% 0;
+  }
+  to {
+    background-position: -110% 0;
+  }
+}
+
+.path-bar {
+  transform-origin: left center;
+  animation: grow-x 520ms cubic-bezier(0.2, 0.7, 0.3, 1) both;
+}
+
+@keyframes grow-x {
+  from {
+    transform: scaleX(0);
+  }
 }

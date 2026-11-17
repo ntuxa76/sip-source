@@ -1,4 +1,4 @@
-import { CircleAlert, Info, TriangleAlert, X } from "lucide-react";
+import { CircleAlert, Info, RefreshCw, TriangleAlert, X } from "lucide-react";
 import { useEffect, useId, useRef, type ComponentProps, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { mosVerdict } from "../lib/format";
@@ -64,10 +64,10 @@ export function Badge({ tone = "neutral", children, title, mono }: { tone?: Tone
 }
 
 /** A state written in plain text with a coloured dot in front. The words carry the meaning, the dot only helps scanning. */
-export function Status({ tone = "neutral", children, title }: { tone?: Tone; children: ReactNode; title?: string }) {
+export function Status({ tone = "neutral", children, title, live }: { tone?: Tone; children: ReactNode; title?: string; live?: boolean }) {
   return (
     <span title={title} className="inline-flex items-center gap-1.5 whitespace-nowrap">
-      <span aria-hidden className={`w-1.5 h-1.5 shrink-0 rounded-full ${dotClass[tone]}`} />
+      <span aria-hidden className={`w-1.5 h-1.5 shrink-0 rounded-full ${dotClass[tone]} ${live ? "pulse" : ""}`} style={live ? { color: `var(--${tone === "neutral" ? "ink-3" : tone})` } : undefined} />
       {children}
     </span>
   );
@@ -131,7 +131,17 @@ export function MosCell({ mos }: { mos: number | null }) {
 
 export function CallStateBadge({ state }: { state: string }) {
   const tone: Tone = state === "completed" ? "good" : state === "failed" || state === "timeout" ? "crit" : state === "cancelled" ? "neutral" : "info";
-  return <Status tone={tone}>{state}</Status>;
+  return <Status tone={tone} live={["setup", "ringing", "answered"].includes(state)}>{state}</Status>;
+}
+
+/** Reloads the queries behind a page or panel; the icon turns while they load. */
+export function RefreshButton({ onClick, busy, label = "Refresh", compact }: { onClick: () => void; busy?: boolean; label?: string; compact?: boolean }) {
+  return (
+    <Button onClick={onClick} title={label} aria-label={label} className={compact ? "px-2" : ""}>
+      <RefreshCw size={14} aria-hidden className={busy ? "spin" : ""} />
+      {!compact && label}
+    </Button>
+  );
 }
 
 export function RegStatus({ status }: { status: string }) {

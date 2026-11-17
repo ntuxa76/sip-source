@@ -3,6 +3,7 @@
 
 #![recursion_limit = "512"]
 
+mod anomaly;
 mod api;
 mod auth;
 mod callview;
@@ -18,6 +19,7 @@ mod local;
 mod metrics;
 mod model;
 mod registrations;
+mod rotation;
 mod search;
 mod sip;
 mod sql;
@@ -152,6 +154,7 @@ async fn main() {
         local: engine,
         ingest: capture,
         live_sessions: AtomicUsize::new(0),
+        anomaly_learned_hours: AtomicUsize::new(0),
     });
     storage::refresh(&app).await.unwrap_or_else(|e| fail(e));
     auth::bootstrap_admin(&app).await.unwrap_or_else(|e| fail(e));
@@ -160,12 +163,15 @@ async fn main() {
     tokio::spawn(async move { watcher.local.watch().await });
     ingest::start(app.clone(), rows).await.unwrap_or_else(|e| fail(e));
     tokio::spawn(finalizer::run(app.clone()));
+    tokio::spawn(anomaly::run(app.clone()));
 
-    // Picks up settings changed by another instance, and removes expired rows.
+    // Picks up settings changed by another instance, removes expired rows, and keeps the
+    // captured data under its size limit.
     let housekeeping = app.clone();
     tokio::spawn(async move {
         let mut tick = tokio::time::interval(Duration::from_secs(30));
         let mut runs = 0u64;
+        let mut rotation = rotation::Rotation::default();
         loop {
             tick.tick().await;
             if let Ok(values) = db::load_settings(&housekeeping.db).await {
@@ -176,6 +182,9 @@ async fn main() {
                 let _ = sqlx::query("DELETE FROM sessions WHERE expires_at < ?").bind(now).execute(&housekeeping.db).await;
                 let cutoff = now - chrono::Duration::days(housekeeping.settings.int("audit_retention_days"));
                 let _ = sqlx::query("DELETE FROM audit_events WHERE ts < ?").bind(cutoff).execute(&housekeeping.db).await;
+            }
+            if runs % 2 == 1 {
+                rotation.run(&housekeeping).await;
             }
             runs += 1;
         }
