@@ -14,6 +14,7 @@ import { PrefsProvider } from "./lib/context";
 import { AdminPage, PreferencesPage } from "./pages/Admin";
 import { CallPage } from "./pages/Call";
 import { DashboardList, DashboardView, ExplorePage, HomePage } from "./pages/Dashboards";
+import { AnomaliesPage } from "./pages/Anomalies";
 import { LivePage } from "./pages/Live";
 import { LoginPage, SetupPage } from "./pages/Login";
 import { SearchPage } from "./pages/Search";
@@ -58,6 +59,7 @@ const routeTree = root.addChildren([
   child("/", HomePage),
   child("/search", SearchPage),
   child("/live", LivePage),
+  child("/anomalies", AnomaliesPage),
   child("/dashboards", DashboardList),
   child("/dashboards/$id", Dashboard),
   child("/explore", ExplorePage),

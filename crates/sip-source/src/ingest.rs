@@ -85,6 +85,9 @@ pub struct Ingest {
     /// Call-IDs with new messages, and when they were last touched.
     pub dirty: Mutex<HashMap<String, i64>>,
     registers: Mutex<HashMap<(String, u32), PendingRegister>>,
+    /// Addresses that sent or received a REGISTER, and when: phones and the registrars they use.
+    /// A peer that only exchanges calls is treated as a trunk when no topology is configured.
+    pub registered: Mutex<HashMap<String, i64>>,
     minute: Mutex<Minute>,
     pub totals: Mutex<HashMap<String, u64>>,
     /// Live capture only pays for serialization while someone is subscribed.
@@ -139,6 +142,7 @@ pub fn new() -> (Ingest, RowBox) {
         agents: RwLock::new(HashMap::new()),
         dirty: Mutex::new(HashMap::new()),
         registers: Mutex::new(HashMap::new()),
+        registered: Mutex::new(HashMap::new()),
         minute: Mutex::new(Minute::default()),
         totals: Mutex::new(HashMap::new()),
         live,
@@ -242,6 +246,10 @@ fn handle_register(app: &App, ing: &Ingest, h: &Hep, ts: i64, node: &str, peer: 
     let key = (s.call_id.clone(), s.cseq_num);
     let mut map = ing.registers.lock().unwrap();
     if s.is_request {
+        let mut seen = ing.registered.lock().unwrap();
+        seen.insert(h.src_ip.clone(), ts);
+        seen.insert(h.dst_ip.clone(), ts);
+        drop(seen);
         // A retransmission keeps the first attempt's timing.
         if map.contains_key(&key) {
             return;

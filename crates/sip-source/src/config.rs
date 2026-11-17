@@ -107,6 +107,8 @@ pub const DEFS: &[Def] = &[
     d("call_max_age_hours", Int(1, 168), "6", "Capture", "Close open calls after (h)", "A call with no signalling for this long is closed as timed out.", false, false),
     d("pdd_warning_ms", Int(100, 120000), "5000", "Capture", "High PDD threshold (ms)", "Calls above this get the High post-dial delay finding.", false, false),
     d("high_risk_prefixes", Str, "", "Capture", "High-risk prefixes", "Comma-separated normalized number prefixes that raise a toll-fraud finding.", false, false),
+    d("anomaly_enabled", Bool, "true", "Anomalies", "Find anomalies", "Compares the last 30 minutes, overall, per trunk and per source, with what is normal for that hour, and lists what is out of line on the Anomalies page.", false, true),
+    d("anomaly_min_calls", Int(3, 100000), "10", "Anomalies", "Fewest calls to judge", "ASR, failure rate and post-dial delay are only judged with at least this many calls in the window.", false, false),
     d("topology_carriers", Str, "", "Topology", "Carriers", "Name=CIDR pairs, comma separated, e.g. CarrierX=203.0.113.0/24,CarrierY=198.51.100.7. Sets call direction and trunk.", false, false),
     d("topology_subscribers", Str, "", "Topology", "Subscriber groups", "Name=CIDR pairs, comma separated, e.g. Baghdad=10.10.0.0/16.", false, false),
 
@@ -116,6 +118,7 @@ pub const DEFS: &[Def] = &[
     d("retention_logs_days", Int(1, 3650), "14", "Retention", "Logs (days)", "Applied to ClickHouse at startup and when a storage is selected.", true, false),
     d("retention_calls_days", Int(1, 3650), "365", "Retention", "Call records (days)", "Applied to ClickHouse at startup and when a storage is selected.", true, false),
     d("retention_metrics_days", Int(1, 3650), "90", "Retention", "Capture metrics (days)", "Applied to ClickHouse at startup and when a storage is selected.", true, false),
+    d("storage_max_gb", Int(0, 100000), "0", "Retention", "Size limit (GB)", "Optional. When the captured data grows past this size, the oldest day of SIP messages, RTCP reports, registrations and logs is deleted, one day at a time, until it fits. Works together with the days above. 0 turns it off.", false, false),
 ];
 
 /// Process-level variables, which are read once at startup and aren't stored anywhere:

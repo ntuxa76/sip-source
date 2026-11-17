@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, Navigate, Outlet, useNavigate, useRouterState, useSearch } from "@tanstack/react-router";
-import { BarChart3, Check, ChevronDown, ChevronLeft, ChevronRight, Clock, Compass, Database, LayoutDashboard, LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, Radio, RefreshCw, Search, Server, Settings, Sun, UserRound, Users, X } from "lucide-react";
+import { Activity, BarChart3, Check, ChevronDown, ChevronLeft, ChevronRight, Clock, Compass, Database, LayoutDashboard, LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, Radio, RefreshCw, Search, Server, Settings, Sun, UserRound, Users, X } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { get, post } from "../lib/api";
@@ -8,6 +8,7 @@ import { rangeParam, resolveMs, usePrefs, useRange, useSource } from "../lib/con
 import { fmtDateTime, tzOffsetMs } from "../lib/format";
 import { adminHome, homePath, pathAllowed, seesTraffic } from "../lib/access";
 import { Button, IconButton, Select, fieldClass, popoverClass, useDismiss } from "./ui";
+import { useAnomalies } from "../pages/Anomalies";
 
 function useNav() {
   const { can, settings } = usePrefs();
@@ -16,6 +17,7 @@ function useNav() {
     { id: "home", group: "Monitor", to: "/", label: "Home", icon: LayoutDashboard, show: can("dashboards_view") },
     { id: "dashboards", group: "Monitor", to: "/dashboards", label: "Dashboards", icon: BarChart3, show: can("dashboards_view") },
     { id: "explore", group: "Monitor", to: "/explore", label: "Explore", icon: Compass, show: can("explore") },
+    { id: "anomalies", group: "Monitor", to: "/anomalies", label: "Anomalies", icon: Activity, show: can("dashboards_view") },
     { id: "live", group: "Monitor", to: "/live", label: "Live", icon: Radio, show: can("live_view") },
     { id: "search", group: "Troubleshoot", to: "/search", label: "Search", icon: Search, show: can("search_all") },
     { id: "subscribers", group: "Troubleshoot", to: "/subscribers", label: "Subscribers", icon: Users, show: can("subscribers_view") },
@@ -56,6 +58,17 @@ function CaptureStatus({ compact }: { compact: boolean }) {
   );
 }
 
+/** Open anomalies, beside the menu item. */
+function AnomalyCount({ collapsed }: { collapsed: boolean }) {
+  const { data } = useAnomalies("open");
+  const items = data?.items ?? [];
+  if (!items.length) return null;
+  const crit = items.some((a) => a.severity === "crit");
+  const tone = crit ? "bg-crit" : items.some((a) => a.severity === "serious") ? "bg-serious" : "bg-warn";
+  if (collapsed) return <span aria-label={`${items.length} open`} className={`absolute top-1 right-1 w-2 h-2 rounded-full ${tone} ${crit ? "pulse" : ""}`} style={{ color: "var(--crit)" }} />;
+  return <span aria-label={`${items.length} open`} className={`ml-auto min-w-5 h-5 px-1.5 grid place-items-center rounded-full text-2xs font-semibold text-white ${tone} ${crit ? "pulse" : ""}`} style={{ color: "white" }}>{items.length}</span>;
+}
+
 export function Shell() {
   const { can, theme, toggleTheme, me, settings, prefs, savePrefs } = usePrefs();
   const client = useQueryClient();
@@ -72,6 +85,16 @@ export function Shell() {
   // On wide screens the sidebar can shrink to icons. The choice is kept per user; the phone
   // drawer always opens in full.
   const collapsed = Boolean(prefs.sidebarCollapsed) && !menuOpen;
+  const navigate = useNavigate();
+  // The logo goes home and reloads it, also when home is already open.
+  const [reloads, setReloads] = useState(0);
+  const goHome = (e: React.MouseEvent) => {
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+    e.preventDefault();
+    navigate({ to: homePath(can, settings.sql_enabled), search: { from: search.from, to: search.to, src: search.src } as any });
+    setReloads((n) => n + 1);
+    client.invalidateQueries();
+  };
 
   useEffect(() => setMenuOpen(false), [path]);
 
@@ -113,8 +136,8 @@ export function Shell() {
         className={`${menuOpen ? "max-lg:fixed max-lg:inset-y-0 max-lg:left-0 max-lg:z-40 max-lg:shadow-pop" : "max-lg:hidden"} ${collapsed ? "w-14" : "w-56"} shrink-0 flex flex-col bg-sidebar border-r border-line transition-[width] duration-150`}
       >
         <div className={`h-12 shrink-0 flex items-center border-b border-line ${collapsed ? "justify-center" : "gap-2.5 px-4"}`}>
-          <Link to={homePath(can, settings.sql_enabled)} title="Home" aria-label={collapsed ? `${settings.app_name} home` : undefined} className="flex items-center gap-2.5 min-w-0 -mx-1 px-1 py-1 rounded-md hover:bg-hover">
-            <img src="/logo.png" alt="" width={24} height={24} className="shrink-0" />
+          <Link to={homePath(can, settings.sql_enabled)} onClick={goHome} title="Home (reloads)" aria-label={collapsed ? `${settings.app_name} home` : undefined} className="logo-link flex items-center gap-2.5 min-w-0 -mx-1 px-1 py-1 rounded-md hover:bg-hover">
+            <img src="/logo.png" alt="" width={24} height={24} key={reloads} className={`shrink-0 ${reloads ? "logo-spin" : ""}`} />
             {!collapsed && <span className="text-sm font-semibold truncate">{settings.app_name}</span>}
           </Link>
           <IconButton label="Close menu" onClick={() => setMenuOpen(false)} className="lg:hidden ml-auto -mr-2">
@@ -138,12 +161,13 @@ export function Shell() {
                     search={{ from: search.from, to: search.to, src: search.src } as any}
                     aria-current={on ? "page" : undefined}
                     title={collapsed ? n.label : undefined}
-                    className={`flex items-center h-8 my-px rounded-md focus-visible:-outline-offset-2 ${collapsed ? "justify-center w-10 mx-auto" : "gap-2.5 mx-2 px-2.5"} ${
+                    className={`relative flex items-center h-8 my-px rounded-md focus-visible:-outline-offset-2 ${collapsed ? "justify-center w-10 mx-auto" : "gap-2.5 mx-2 px-2.5"} ${
                       on ? "bg-sidebar-active text-ink font-medium shadow-[inset_0_0_0_1px_var(--line)]" : "text-ink-2 hover:bg-hover hover:text-ink"
                     }`}
                   >
                     <n.icon size={16} aria-hidden className={`shrink-0 ${on ? "text-accent" : "text-ink-3"}`} />
                     {collapsed ? <span className="sr-only">{n.label}</span> : <span className="truncate">{n.label}</span>}
+                    {n.id === "anomalies" && <AnomalyCount collapsed={collapsed} />}
                   </Link>
                 );
               })}
@@ -201,7 +225,7 @@ export function Shell() {
           </div>
         )}
         <main className="flex-1 min-h-0 overflow-auto p-3 sm:p-4 focus:outline-none" id="main-scroll" tabIndex={-1}>
-          {page}
+          <div key={`${path}:${reloads}`} className="page-enter">{page}</div>
         </main>
       </div>
     </div>

@@ -1,11 +1,12 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useIsFetching, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, Navigate, useNavigate, useSearch } from "@tanstack/react-router";
 import { Braces, ChevronDown, Copy, Download, FileUp, History, Maximize2, Pencil, Plus, RotateCcw, Save, Settings2, Trash2, X } from "lucide-react";
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import GridLayout, { useContainerWidth } from "react-grid-layout";
 import { PanelView, TimePanelForExplore } from "../components/Panel";
 import type { PanelContext } from "../components/Panel";
-import { Button, Card, Dialog, Empty, ErrorNote, Field, IconButton, Loading, PageHeader, Select, Tabs, fieldClass, inputClass, popoverClass, useDismiss } from "../components/ui";
+import { AnomalyRow, useAnomalies } from "./Anomalies";
+import { Button, Card, Dialog, Empty, ErrorNote, Field, IconButton, Loading, PageHeader, RefreshButton, Select, Tabs, fieldClass, inputClass, popoverClass, useDismiss } from "../components/ui";
 import { del, get, post, put } from "../lib/api";
 import type { MetricInfo } from "../lib/api";
 import { Busy } from "../components/Orb";
@@ -311,6 +312,7 @@ function varParam(name: string) {
 
 export function DashboardView({ id }: { id: string }) {
   const client = useQueryClient();
+  const fetching = useIsFetching();
   const navigate = useNavigate();
   const { can, crosshair, setRefreshMs, tz } = usePrefs();
   const { from, setRange } = useRange();
@@ -400,6 +402,7 @@ export function DashboardView({ id }: { id: string }) {
             </div>
           ) : (
             <div className="flex flex-wrap gap-2">
+              <RefreshButton onClick={() => client.refetchQueries({ type: "active" })} busy={fetching > 0} />
               {can("dashboards_edit") && <Button onClick={() => setDialog("versions")}><History size={14} />History</Button>}
               <Button onClick={toggleKiosk}><Maximize2 size={14} />{search.kiosk ? "Exit full screen" : "Full screen"}</Button>
               {can("dashboards_edit") && <Button variant="primary" onClick={() => setDraft(data.dashboard)}><Pencil size={14} />Edit</Button>}
@@ -441,8 +444,29 @@ export function HomePage() {
   return (
     <>
       <GettingStarted />
+      <OpenAnomalies />
       <DashboardView key={settings.home_dashboard} id={settings.home_dashboard} />
     </>
+  );
+}
+
+/** The most serious open anomalies, at the top of Home. */
+function OpenAnomalies() {
+  const { data } = useAnomalies("open");
+  const all = data?.items ?? [];
+  const items = all.slice(0, 4);
+  if (!items.length) return null;
+  const crit = all.some((a) => a.severity === "crit");
+  return (
+    <Card
+      className="mb-3 overflow-hidden"
+      title={<span className="flex items-center gap-2"><span className={`w-2 h-2 rounded-full ${crit ? "bg-crit pulse" : "bg-warn"}`} style={{ color: "var(--crit)" }} />{all.length} open {all.length === 1 ? "anomaly" : "anomalies"}</span>}
+      right={<Link to="/anomalies" className="text-accent hover:underline">Open the Anomalies page</Link>}
+    >
+      <ul className="divide-y divide-line">
+        {items.map((a) => <AnomalyRow key={a.id} a={a} />)}
+      </ul>
+    </Card>
   );
 }
 
@@ -512,6 +536,12 @@ const VIZ = [
   { value: "bars", label: "Bars" },
 ];
 
+function ExploreRefresh() {
+  const client = useQueryClient();
+  const fetching = useIsFetching();
+  return <RefreshButton onClick={() => client.refetchQueries({ type: "active" })} busy={fetching > 0} />;
+}
+
 export function ExplorePage() {
   const { data } = useQuery({ queryKey: ["catalogue"], queryFn: () => get("/metrics/catalogue") });
   const [metric, setMetric] = useState("attempts");
@@ -527,7 +557,7 @@ export function ExplorePage() {
 
   return (
     <div>
-      <PageHeader title="Explore" description="Pick a metric and a breakdown. No SQL needed." />
+      <PageHeader title="Explore" description="Pick a metric and a breakdown. No SQL needed." right={<ExploreRefresh />} />
       <div className="flex flex-wrap items-center gap-2 mb-3">
         <Select label="Metric" value={metric} onChange={setMetric} options={metrics.map((m) => ({ value: m.id, label: m.name }))} />
         <Select label="Group by" value={dim} onChange={setDim} options={[{ value: "", label: "No breakdown" }, ...data.dimensions.map((d: any) => ({ value: d.id, label: d.name }))]} />

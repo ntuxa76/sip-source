@@ -2,6 +2,34 @@
 
 Images are published as `ntuxa76/sip-source:<version>`.
 
+## 0.10
+
+- **Anomalies.** sip-source learns what is normal for each hour from your own traffic and checks
+  the last 30 minutes every five minutes, overall, per trunk and per source: call volume, answer
+  rate, 5xx failures, post-dial delay, voice quality and failed registrations. Anything out of line
+  opens an anomaly with its normal band, a 24-hour chart and a link to the calls behind it. Open
+  anomalies show on Home and beside the menu item, and close by themselves when traffic recovers.
+  Turn it off, or change how many calls are needed, under **Settings → Anomalies**.
+- **Call path.** A new **Path** tab on every call shows each device the INVITE crossed, in order,
+  with its software, how long it held the INVITE, what it answered, which device started a
+  failure, where a device changed the answer it got (for example 503 passed on as 480), and
+  proxies seen in Via headers that were not captured. A timing chart shows each hop's wait.
+- **Trunks without configuration.** When the Topology settings name no carriers, a device that
+  takes calls but never registers or takes registrations is treated as a trunk and named after its
+  software and address, so the trunk dashboard, ASR by trunk and carrier rejects fill in on their
+  own. Calls stored before the upgrade keep their old values.
+- **Size limit.** Optional **Settings → Retention → Size limit (GB)**: when captured data grows
+  past it, the oldest day is deleted, one day at a time. Off by default; retention by days still
+  applies.
+- **Live capture** keeps working under heavy traffic: keep-alives and registrations are hidden
+  unless asked for, each dialog keeps its latest 300 messages, the stream reconnects by itself
+  after a dropped connection, and reverse proxies no longer hold it back.
+- The message ladder is coloured by message type, with a legend, the software of each device, a
+  bar showing setup, ringing and talk, and arrows that draw in.
+- Refresh buttons on dashboards, Explore and search. The logo goes to Home and reloads it.
+- Gentle motion across the interface: pages and cards rise in, buttons respond, live states pulse.
+  It is switched off when the system asks for reduced motion.
+
 ## 0.9.1
 
 - Loading indicators are animated orbs whose motion shows the kind of work: loading, searching

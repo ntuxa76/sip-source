@@ -1,6 +1,5 @@
 # sip-source
 
-
 SIP capture, troubleshooting and monitoring for voice networks.
 
 Your SIP servers send their traffic to sip-source over HEP. It stores every message, joins the
@@ -19,6 +18,11 @@ interface.
 - **Dashboards.** Built-in dashboards for calls, carriers, registrations, media, nodes, security
   and capture health. Each dashboard is one JSON document; panels are built from a metric catalogue
   or from SQL.
+- **Anomalies.** Learns what is normal for each hour from your own traffic and flags drops in
+  volume or answer rate, failure spikes, slow call setup, poor voice quality and failing
+  registrations, per trunk and per source, without thresholds to set.
+- **Call path.** Every device a call crossed, how long each one took, and which one started a
+  failure.
 - **Live capture** of dialogs as they happen, off until someone starts it.
 - **SQL workbench** with documented read-only views of all captured data.
 - **Access control.** Roles, per-user permission overrides, an audit log, and single sign-on with
@@ -55,7 +59,7 @@ docker run -d --name sip-source \
   -e SS_DB_HOST=mariadb.example.net \
   -e SS_DB_USER=sip_source \
   -e SS_DB_PASSWORD=change-me \
-  ntuxa76/sip-source:0.9.1
+  ntuxa76/sip-source:0.10
 ```
 
 The service speaks plain HTTP. Put a TLS reverse proxy in front of it for production; see
@@ -74,6 +78,10 @@ storage**. sip-source creates the database, tables and views itself. Its ClickHo
 `CREATE`, `ALTER`, `INSERT` and `SELECT` on that database. Data already in the Local file storage is
 not copied over.
 
+Captured data is deleted after the days set under **Admin → Settings → Retention**. To also cap
+its size, set **Size limit (GB)** there: past that size the oldest day is deleted, one day at a
+time. It is off by default.
+
 Users, roles, sessions, dashboards, settings and the audit log are kept in MariaDB.
 
 ## Configuration
@@ -84,7 +92,7 @@ An invalid value stops the container at startup with a message naming the variab
 
 - [docs/ENVIRONMENT.md](docs/ENVIRONMENT.md) lists every variable with its default.
 - [.env.example](.env.example) has the same list, ready to copy.
-- `docker run --rm ntuxa76/sip-source:0.9.1 env` prints the list from the image.
+- `docker run --rm ntuxa76/sip-source:0.10 env` prints the list from the image.
 
 Passwords and keys can be read from files with the `_FILE` suffix, for example
 `SS_DB_PASSWORD_FILE=/run/secrets/db_password`.
@@ -113,7 +121,7 @@ environment variables from `VP_*` to `SS_*` (the old names still work, with a wa
   there is no disk buffer.
 - One-way audio and missing media are not detected. MOS is estimated from RTCP loss and jitter
   unless the sender reports it.
-- No alert rules and no PCAP import.
+- Anomalies are shown in the interface only; nothing is sent by email or chat yet. No PCAP import.
 - Sign-in with local accounts or OpenID Connect; no LDAP, RADIUS, SAML or two-factor codes.
 - Images are built for `linux/amd64`.
 

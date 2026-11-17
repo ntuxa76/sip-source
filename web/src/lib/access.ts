@@ -44,6 +44,7 @@ export function pathAllowed(path: string, can: Can, sqlEnabled: boolean): boolea
   switch (first) {
     case "":
     case "dashboards":
+    case "anomalies":
       return can("dashboards_view");
     case "explore":
       return can("explore");
